@@ -25,6 +25,13 @@
         * [3.2.1 API使用](#321-api使用)
         * [3.2.2 公平锁与非公平锁](#322-公平锁与非公平锁)
         * [3.2.2 ReentrantLock优点](#322-reentrantlock优点)
+      * [3.3 CountDownLatch](#33-countdownlatch)
+        * [3.3.1 CountDownLatch是什么](#331-countdownlatch是什么)
+        * [3.3.2 CountDownLatch简单使用](#332-countdownlatch简单使用)
+        * [3.3.3 CountDownLatch使用场景](#333-countdownlatch使用场景)
+      * [3.4 CyclicBarrier](#34-cyclicbarrier)
+        * [3.4.1 CyclicBarrier是什么](#341-cyclicbarrier是什么)
+        * [3.4.2 CyclicBarrier 使用场景](#342-cyclicbarrier-使用场景)
 
 
 # architect
@@ -216,3 +223,37 @@ ReentrantLock 默认是非公平的，如图3-2-1-1,公平锁的情况线程1和
 3.lockInterruptibly可以控制被打断
 
 4.可以指定公平与非公平锁
+
+#### 3.3 CountDownLatch
+
+##### 3.3.1 CountDownLatch是什么
+
+是一个同步工具类，它允许一个或多个线程一直等待，直到其他线程的操作执行完后再执行
+通俗的讲CountDown叫倒数，latch叫门栓(倒数的一个门栓，5、4、3、2、1数到了，我这个门栓就开了)
+
+##### 3.3.2 CountDownLatch简单使用
+初始化计数为5的门栓，当调用5次countDownLatch.countDown()方法时，门栓将被打开
+CountDownLatch countDownLatch = new CountDownLatch(5);
+
+countDownLatch.countDown()将门栓计数减1
+
+countDownLatch.await()等待
+
+##### 3.3.3 CountDownLatch使用场景
+
+举例：在某些业务情况下，要求我们等某个条件或者任务完成后才可以继续处理后续任务。
+同时在线程完成时也会触发一定事件。方便业务继续向下执行
+
+#### 3.4 CyclicBarrier
+
+##### 3.4.1 CyclicBarrier是什么
+
+CyclicBarrier意思是循环栅栏，大概意思是一个可循环利用的屏障。
+这有一个栅栏，什么时候人满了就把栅栏推到。把人放出去，出去之后栅栏又重新起来，再来人，满了，推到之后又继续
+[CyclicBarrier 使用详解](https://www.jianshu.com/p/333fd8faa56e) 
+
+##### 3.4.2 CyclicBarrier 使用场景
+
+举例：比如某个接口需要访问网络、需要访问数据库、需要访问文件，
+如果每一个操作都需要10秒，顺序执行的话至少需要30秒，
+如果并发执行，分别使用不同的线程去访问网络、数据库、文件，等待3个线程全部到位了，再进行后面的操作，这个时候我们可以用CyclicBarrier
