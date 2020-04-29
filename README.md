@@ -41,10 +41,10 @@
         * [3.7.1 Semaphore介绍](#371-semaphore介绍)
       * [3.8 Exchanger](#38-exchanger)
       * [3.9 总结](#39-总结)
+    * [4 LockSupport、淘宝面试题与源码阅读方法论](#4-locksupport、淘宝面试题与源码阅读方法论)
+      * [4.1 LockSupport](#41-locksupport)
 
-
-
-      
+   
 # architect
 马士兵java架构师课程的一些笔记整理以及代码(src文件夹下有脑图，脑图暂时没有更新)
 ## 多线程与高并发
@@ -687,3 +687,164 @@ ReadWriteLock 读写锁
 Semaphore 限流用
 
 Exchange两个线程之间互相交换数据
+
+### 4 LockSupport、淘宝面试题与源码阅读方法论
+
+#### 4.1 LockSupport
+
+在以前我们要阻塞和唤醒某一个具体的线程有很多限制比如：
+
+1. 因为wait()方法需要释放锁，所以也必须在synchronized中使用，否则会跑出异常IllegalMonitorStateException
+
+2.notify()方法也必须在synchronized中使用，并且应该指定对象
+
+3.synchronized、wait()、notify()对象必须一致，一个synchronized()代码块中只能有一个线程调用wait()或notify()
+
+以上诸多限制，体现出了很多不足，所以LockSupport的好处就体现出来了。
+在JDK1.6中的java.util.concurrent的子包locks中引入了LockSupport这个API，LockSupport是一个比较底层的工具类，
+用来创建锁和其他同步工具类的基本线程阻塞原语。java锁和同步器框架的核心AQS:AbstractQueuedSynchronizer,
+就是通过调用LockSupport.park()和LockSupport.unpark()的方法，来实现线程的阻塞和唤醒的。来看一段小程序：
+
+```java
+package com.kiwi.field.architect.chap4;
+
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.LockSupport;
+
+public class TestLockSupport {
+    public static void main(String[] args) {
+        Thread t = new Thread(()->{
+            for (int i = 0; i < 10; i++) {
+                System.out.println(i);
+                if(i == 5) {
+                    // 使用LockSupport的park()方法阻塞当前线程t
+                    LockSupport.park();
+                }
+                try {
+                    TimeUnit.SECONDS.sleep(1);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        });
+
+        t.start();
+    }
+}
+
+```
+
+从以上程序可以看出，线程t循环10次，每次睡1秒，当i=5的时候，我们调用了LockSupport的park方法
+使当前线程阻塞，此时方法并没有加锁，就默认使当前线程阻塞了，由此可以看出LockSupport.park()方法并没有加锁的限制。
+
+我们再来看一段小程序：
+```java
+package com.kiwi.field.architect.chap4;
+
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.LockSupport;
+
+public class TestLockSupport {
+    public static void main(String[] args) {
+        Thread t = new Thread(()->{
+            for (int i = 0; i < 10; i++) {
+                System.out.println(i);
+                if(i == 5) {
+                    // 使用LockSupport的park()方法阻塞当前线程t
+                    LockSupport.park();
+                }
+                try {
+                    TimeUnit.SECONDS.sleep(1);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        });
+
+        t.start();
+
+
+
+        try {
+            TimeUnit.SECONDS.sleep(8);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        System.out.println("after 8 senconds!");
+        LockSupport.unpark(t);
+
+    }
+}
+
+```
+分析上面的程序，我们只需要在第一个小程序的主线程中，调用LockSupport的unpark()方法，就可以唤醒某个具体的线程，
+这里我们指定了线程"t",代码运行以后结果显而易见，线程并没有被阻塞，我们成功唤醒了线程"t",在这里还有一点，我们需要分析一下，
+在主线程中线程"t"调用了start()方法以后，因为紧接着执行了LockSupport的unpark()方法，所以也就是说，在线程"t"
+还没有执行还没有阻塞的时候，已经调用了LockSupport的unpark方法来唤醒线程"t",之后线程"t"才调用了LockSupport的park()来使
+线程"t"阻塞，但是线程"t"并没有被阻塞，由此可以看出，LockSupport的unpark方法可以优先于LockSupport的park方法执行。
+
+我们再来看最后一个小程序：
+```java
+package com.kiwi.field.architect.chap4;
+
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.LockSupport;
+
+public class TestLockSupport {
+    public static void main(String[] args) {
+        Thread t = new Thread(()->{
+            for (int i = 0; i < 10; i++) {
+                System.out.println(i);
+                if(i == 5) {
+                    // 使用LockSupport的park()方法阻塞当前线程t
+                    LockSupport.park();
+                }
+
+                if (i==8) {
+                    // 使用LockSupport的park()方法阻塞当前线程t
+                    LockSupport.park();
+                }
+                try {
+                    TimeUnit.SECONDS.sleep(1);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        });
+
+        t.start();
+
+
+//        LockSupport.unpark(t);
+
+        try {
+            TimeUnit.SECONDS.sleep(8);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        System.out.println("after 8 senconds!");
+
+        LockSupport.unpark(t);
+
+    }
+}
+
+```
+在第二个小程序的基础上又增加了if (i==8)的判断，在i==8的时候再次调用LockSupport的方法使线程"t"阻塞，我们可以看到线程被阻塞了
+原因是LockSupport.unpark()方法就像是帮线程获得一块令牌，而LockSupport.park()方法就像是识别令牌，
+当主线程调用了LockSupport.unpark(t)相当于线程t获得了一块令牌，当线程t第一次调用LockSupport.park()时，线程t已经有令牌了，
+所以不会阻塞，但是第二次调用LockSupport.park()时，线程t已经没有令牌可以使用了，就会一直阻塞下去
+
+由以上3个小程序我们可以总结得出以下几点：
+
+1.LockSupport不需要synchorized加锁就可以实现线程的阻塞和唤醒
+
+2.LockSupport.unpark()可以优先于LockSupport.park()执行，并且线程不会阻塞
+
+3.如果一个线程处于等待状态，连续调用了两次park()方法，就会使该线程无法被唤醒
+
+LockSupport中park()和unpark方法实现原理
+
+park()和unpark方法的实现是由unsafe类提供的，而unsafe类是由c和c++语言完成的，其实原理也是比较好理解的，
+它主要通过一个变量作为标识，变量值在0和1之间来回切换，当这个变量大于0的时候线程就获得了令牌，从这一点我们不难知道，其实unpark()和park()方法就是在
+改变这个变量的值，来达到线程的阻塞和唤醒的，具体不再赘述。
