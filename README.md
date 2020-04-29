@@ -1,4 +1,4 @@
-# Table of Contents
+# 马士兵架构课笔记
 
 * [architect](#architect)
   * [多线程与高并发](#多线程与高并发)
@@ -35,7 +35,7 @@
 
 
 # architect
-java架构师课程的一些笔记整理以及代码(src文件夹下有脑图)
+马士兵java架构师课程的一些笔记整理以及代码(src文件夹下有脑图)
 ## 多线程与高并发
 ### 1.基础概念
 #### 1.1 什么是线程？
@@ -232,17 +232,50 @@ ReentrantLock 默认是非公平的，如图3-2-1-1,公平锁的情况线程1和
 通俗的讲CountDown叫倒数，latch叫门栓(倒数的一个门栓，5、4、3、2、1数到了，我这个门栓就开了)
 
 ##### 3.3.2 CountDownLatch简单使用
+
 初始化计数为5的门栓，当调用5次countDownLatch.countDown()方法时，门栓将被打开
+
+指定了计数的次数<br>
 CountDownLatch countDownLatch = new CountDownLatch(5);
 
-countDownLatch.countDown()将门栓计数减1
+countDownLatch.countDown()
+将门栓计数减1
 
-countDownLatch.await()等待
+countDownLatch.await()
+
+调用该方法的线程等到构造方法传入的 N 减到 0 的时候，才能继续往下执行；
 
 ##### 3.3.3 CountDownLatch使用场景
 
 举例：在某些业务情况下，要求我们等某个条件或者任务完成后才可以继续处理后续任务。
 同时在线程完成时也会触发一定事件。方便业务继续向下执行
+```java
+    private static void usingCountDownLatch() {
+        Thread[] threads = new Thread[100];
+        CountDownLatch latch = new CountDownLatch(threads.length);
+
+        for(int i=0; i<threads.length; i++) {
+            threads[i] = new Thread(() -> {
+                int result = 0;
+                for (int j = 0; j < 10000; j++)
+                    result += j;
+                latch.countDown();
+            });
+        }
+
+        for (int i = 0; i < threads.length; i++) {
+            threads[i].start();
+        }
+
+        try {
+            latch.await();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+
+        System.out.println("end latch");
+    }
+```
 
 #### 3.4 CyclicBarrier
 
@@ -257,3 +290,389 @@ CyclicBarrier意思是循环栅栏，大概意思是一个可循环利用的屏�
 举例：比如某个接口需要访问网络、需要访问数据库、需要访问文件，
 如果每一个操作都需要10秒，顺序执行的话至少需要30秒，
 如果并发执行，分别使用不同的线程去访问网络、数据库、文件，等待3个线程全部到位了，再进行后面的操作，这个时候我们可以用CyclicBarrier
+```java
+package com.kiwi.field.architect.chap3;
+
+import java.util.concurrent.BrokenBarrierException;
+import java.util.concurrent.CyclicBarrier;
+
+public class TestCyclicBarrier {
+    public static void main(String[] args) {
+        //CyclicBarrier barrier = new CyclicBarrier(20);
+
+        CyclicBarrier barrier = new CyclicBarrier(20, () -> System.out.println("满人"));
+
+        /*CyclicBarrier barrier = new CyclicBarrier(20, new Runnable() {
+            @Override
+            public void run() {
+                System.out.println("满人，发车");
+            }
+        });*/
+
+        for(int i=0; i<100; i++) {
+
+                new Thread(()->{
+                    try {
+                        barrier.await();
+
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    } catch (BrokenBarrierException e) {
+                        e.printStackTrace();
+                    }
+                }).start();
+            
+        }
+    }
+}
+
+```
+#### 3.5 Phraser
+
+##### 3.5.1 phaser是什么？
+
+phaser翻译成中文叫阶段，它像是结合了countDownLatch和CyclicBarrier，这个稍微复杂一些
+想简单使用phaser，参考代码chap3 下 TestPhaser类 
+
+也可以参考下面这篇文章
+[What's New on Java 7 Phaser](https://www.iteye.com/blog/whitesock-1135457)
+
+##### 3.5.2 phaser使用场景
+
+phaser按照不同的阶段来对线程进行执行，本身是维护着一个阶段这样的一个成员变量，当前我执行到哪个阶段，第0个还是第1
+个阶段等等，每个阶段不同，这个线程可以继续往前走，有的线程走到某个阶段就停了，有的线程会一直走到结束。你的程序中如果需要分好几个阶段执行，而且有的阶段必须得
+必须得几个人共同参与的一种情形可能会用到phaser
+```java
+package com.kiwi.field.architect.chap3;
+
+import java.util.Random;
+import java.util.concurrent.Phaser;
+import java.util.concurrent.TimeUnit;
+
+/**
+ * 模拟一个结婚场景，结婚是有好多人要参加的，因此我们写了一个Person，实现了runnable接口，模拟我们每个人要做一些操作，有
+ * 几种方法，arrive()到达，eat()吃、leave() 离开、hug()拥抱这么几个。作为一个婚礼来说它会分成好几个阶段，
+ * 第1阶段所有人都到齐了
+ * 第2阶段所有人都吃饭
+ * 第3阶段所有人都离开
+ * 第4阶段新郎新娘入洞房
+ * 在上述4个阶段中1、2、3阶段需要所有人都到齐，而第4个阶段洞房的事除了新郎新娘，其他人可不能干了
+ * 以下程序将整个过程分为好几个阶段，而且每个阶段必须要等这些线程给我干完事儿你才能进入下一个阶段
+ */
+public class TestPhaser {
+    static Random r = new Random();
+    static MarriagePhaser phaser = new MarriagePhaser();
+
+
+    static void milliSleep(int milli) {
+        try {
+            TimeUnit.MILLISECONDS.sleep(milli);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public static void main(String[] args) {
+
+        // 指定初始数量为7
+        phaser.bulkRegister(7);
+
+        // 启动5个普通客人线程
+        for(int i=0; i<5; i++) {
+
+            new Thread(new Person("p" + i)).start();
+        }
+
+        // 启动新郎新娘2个线程
+        new Thread(new Person("新郎")).start();
+        new Thread(new Person("新娘")).start();
+
+    }
+
+
+
+    static class MarriagePhaser extends Phaser {
+
+        @Override
+        protected boolean onAdvance(int phase, int registeredParties) {
+            //如果该方法返回true，那么Phaser会被终止。
+            switch (phase) {
+                case 0:
+                    System.out.println("所有人到齐了！" + registeredParties);
+                    System.out.println();
+                    return false;
+                case 1:
+                    System.out.println("所有人吃完了！" + registeredParties);
+                    System.out.println();
+                    return false;
+                case 2:
+                    System.out.println("所有人离开了！" + registeredParties);
+                    System.out.println();
+                    return false;
+                case 3:
+                    System.out.println("婚礼结束！新郎新娘抱抱！" + registeredParties);
+                    return true;
+                default:
+                    return true;
+            }
+        }
+    }
+
+
+    static class Person implements Runnable {
+        String name;
+
+        public Person(String name) {
+            this.name = name;
+        }
+
+        public void arrive() {
+
+            milliSleep(r.nextInt(1000));
+            System.out.printf("%s 到达现场！\n", name);
+            phaser.arriveAndAwaitAdvance();
+        }
+
+        public void eat() {
+            milliSleep(r.nextInt(1000));
+            System.out.printf("%s 吃完!\n", name);
+            // 线程到达arriveAndAwaitAdvance方法时会等待前进
+            phaser.arriveAndAwaitAdvance();
+        }
+
+        public void leave() {
+            milliSleep(r.nextInt(1000));
+            System.out.printf("%s 离开！\n", name);
+
+
+            phaser.arriveAndAwaitAdvance();
+        }
+
+        private void hug() {
+            if(name.equals("新郎") || name.equals("新娘")) {
+                milliSleep(r.nextInt(1000));
+                System.out.printf("%s 洞房！\n", name);
+                phaser.arriveAndAwaitAdvance();
+            } else {
+                // 使当前线程退出，并且是parties值减1
+                phaser.arriveAndDeregister();
+                //phaser.register()
+            }
+        }
+
+        @Override
+        public void run() {
+            arrive();
+
+
+            eat();
+
+
+            leave();
+
+
+            hug();
+
+        }
+    }
+}
+```
+#### 3.6 ReadWriteLock
+
+##### 3.6.1 ReadWriteLock 介绍
+
+这个ReadWriteLock是读写锁，读写锁的概念其实就是共享锁和排他锁，读锁就是共享锁，写锁就是排他锁。
+那这个是什么意思呢，我们先要来理解这件事，读写有很多种情况，比如说你数据库里的某条数据你放在内存里读的时候特别多，而改的时候并不多。
+
+举一个简单的例子：某公司的组织结构，需要在网页上显示，但是写操作却非常少，除非有人进来或者出去，这时候如果有很多个线程进来，
+有的是读线程有的是写线程，要求不它不会产生数据不一致的情况我们会采用最简单的方式就是加锁，每次只能一个人读或者一个人写，但是这样的效率特别低。
+尤其是读多写少的时候，此时我们可以使用ReadWriteLock
+，当读线程来的时候加一把锁是允许其他读线程可以读，写线程来了我不给它，你先别写等我读完你再写。读进程进来的时候大家一块读，因为你不改原来的内容，写线程上来把整个线程全锁定，你先不要读，等我写完你再读
+
+简单来说就是读读共享、读写互斥、写读也是互斥，参考代码chap3 下 TestReadWriteLock类 
+
+```java
+package com.kiwi.field.architect.chap3;
+
+import java.util.Random;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+
+public class TestReadWriteLock {
+    static Lock lock = new ReentrantLock();
+    private static int value;
+
+    static ReadWriteLock readWriteLock = new ReentrantReadWriteLock();
+    static Lock readLock = readWriteLock.readLock();
+    static Lock writeLock = readWriteLock.writeLock();
+
+    public static void read(Lock lock) {
+        try {
+            lock.lock();
+            Thread.sleep(1000);
+            System.out.println("read over!");
+            //模拟读取操作
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public static void write(Lock lock, int v) {
+        try {
+            lock.lock();
+            Thread.sleep(1000);
+            value = v;
+            System.out.println("write over!");
+            //模拟写操作
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+
+
+
+
+    public static void main(String[] args) {
+        //Runnable readR = ()-> read(lock);
+        Runnable readR = ()-> read(readLock);
+
+        //Runnable writeR = ()->write(lock, new Random().nextInt());
+        Runnable writeR = ()->write(writeLock, new Random().nextInt());
+
+        for(int i=0; i<18; i++) new Thread(readR).start();
+        for(int i=0; i<2; i++) new Thread(writeR).start();
+
+
+    }
+}
+```
+#### 3.7 Semaphore
+
+##### 3.7.1 Semaphore介绍
+
+Semaphore中文意思是信号灯，可以往里面传一个参数，permits是允许的数量，你可以想着有几盏信号灯，一个灯里面闪着数字表示到底允许几个来参考我这个信号灯。
+s.acquire()这个方法是阻塞方法，阻塞方法的意思是说我acquire不到我就停在这，acquire的意思就是得到。如果我
+Semaphore s = new Semaphore(1);写的是1，我取一下acquire一下，他就变成0，变成0之后别人是acquire不到的，然后继续执行，线程结束之后注意要s.release
+(),执行完该执行的就把他release掉，release又把0变成1。
+
+Semaphore的含义是限流，比如说你在买车票，Semaphore写5就是只能有5个人同时买票。acquire的意思是获得这把锁。
+线程如果想继续往下执行，必须从semaphore里面获得一个许可，他一个有5个许可到0了你就得给我等着。
+
+例如，有一个八条车道的机动车道，这里只有两个收费站，到这儿，谁acquire得到其中某一个谁执行。默认Semaphore是非
+公平的,new Semaphore(2, true)第2个值传true才是设置公平，公平这个事儿是有一堆队列在那儿等，大家伙过来排队。用这个车道
+和收费站来举例子，就是我们有四辆车都在等着进一个车道，当后面来一辆新的时候，它不会超到前面去，要在后面排队这叫公平。所以说内部是有队列的，不仅内部有队列，
+ReentrantLock、CountDownLatch、CyclicBarrier、Phaser、ReadWriteLock、Semaphore还有后面的exchanger都是用的同一个队列，同一个类实现的，这个类叫AQS
+
+```java
+package com.kiwi.field.architect.chap3;
+
+import java.util.concurrent.Semaphore;
+
+/**
+ * 如果Semaphore 设置为1,则会等到一个线程都执行完，才能执行另一个线程
+ * 如果Semaphore 设置为2，两个线程会同时执行，会出现交替输出的情况
+ * new Semaphore(2, true) 第2个参数为true表示是公平，默认Semaphore是非公平的
+ */
+public class TestSemaphore {
+    public static void main(String[] args) {
+        //Semaphore s = new Semaphore(2);
+//        Semaphore s = new Semaphore(2, true);
+        //允许一个线程同时执行
+        Semaphore s = new Semaphore(1);
+
+        new Thread(()->{
+            try {
+                s.acquire();
+
+                System.out.println("T1 running...");
+                Thread.sleep(200);
+                System.out.println("T1 running...");
+
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            } finally {
+                s.release();
+            }
+        }).start();
+
+        new Thread(()->{
+            try {
+                s.acquire();
+
+                System.out.println("T2 running...");
+                Thread.sleep(200);
+                System.out.println("T2 running...");
+
+                s.release();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }).start();
+    }
+}
+```
+
+#### 3.8 Exchanger
+
+Exanger叫做交换器，两人之间互相交换数据用的。怎么交换呢，看如下代码,T1和T2都有一个成员变量s，
+第1个线程执行到exchanger.exchange位置的时候会阻塞，当第2个线程执行到这的时候，会交换两个线程的数据，
+执行下列代码你会发现t1线程打印的是T2, t2线程打印的是T1
+```java
+package com.kiwi.field.architect.chap3;
+
+import java.util.concurrent.Exchanger;
+
+public class TestExchanger {
+
+    static Exchanger<String> exchanger = new Exchanger<>();
+
+    public static void main(String[] args) {
+        new Thread(()->{
+            String s = "T1";
+            try {
+                s = exchanger.exchange(s);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            System.out.println(Thread.currentThread().getName() + " " + s);
+
+        }, "t1").start();
+
+        new Thread(()->{
+            String s = "T2";
+            try {
+                s = exchanger.exchange(s);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            System.out.println(Thread.currentThread().getName() + " " + s);
+
+        }, "t2").start();
+    }
+}
+
+```
+这段代码的执行过程如下图
+![exchange原理图](readme.assets/exchange原理图.png)
+
+#### 3.9 总结
+ReentrantLock比synchronized更灵活、更方便
+
+CountDownLatch的用法，就是倒计时，什么时候计数完了，门栓打开，程序继续往下执行
+
+CycliBarrier一个栅栏，循环使用，什么时候人满了，栅栏放倒大家冲过去;
+
+Phaser 分阶段的栅栏
+
+ReadWriteLock 读写锁
+
+Semaphore 限流用
+
+Exchange两个线程之间互相交换数据
