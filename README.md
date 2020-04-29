@@ -1,4 +1,4 @@
-# 写程序难吗？难的是你没有花时间，多花时间、多思考、多动手肯定会越来越简单。坚持学习，做一个出色的程序员
+# 架构课笔记
 
 * [architect](#architect)
   * [多线程与高并发](#多线程与高并发)
@@ -32,10 +32,21 @@
       * [3.4 CyclicBarrier](#34-cyclicbarrier)
         * [3.4.1 CyclicBarrier是什么](#341-cyclicbarrier是什么)
         * [3.4.2 CyclicBarrier 使用场景](#342-cyclicbarrier-使用场景)
+      * [3.5 Phraser](#35-phraser)
+        * [3.5.1 phaser是什么？](#351-phaser是什么？)
+        * [3.5.2 phaser使用场景](#352-phaser使用场景)
+      * [3.6 ReadWriteLock](#36-readwritelock)
+        * [3.6.1 ReadWriteLock 介绍](#361-readwritelock-介绍)
+      * [3.7 Semaphore](#37-semaphore)
+        * [3.7.1 Semaphore介绍](#371-semaphore介绍)
+      * [3.8 Exchanger](#38-exchanger)
+      * [3.9 总结](#39-总结)
 
 
+
+      
 # architect
-马士兵java架构师课程的一些笔记整理以及代码(src文件夹下有脑图)
+马士兵java架构师课程的一些笔记整理以及代码(src文件夹下有脑图，脑图暂时没有更新)
 ## 多线程与高并发
 ### 1.基础概念
 #### 1.1 什么是线程？
