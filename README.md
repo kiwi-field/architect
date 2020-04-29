@@ -1,4 +1,4 @@
-# 架构课笔记(用github时刻督促自己，该项目会持续更新)
+# Table of Contents
 
 * [architect](#architect)
   * [多线程与高并发](#多线程与高并发)
@@ -44,7 +44,7 @@
     * [4 LockSupport、淘宝面试题与源码阅读方法论](#4-locksupport、淘宝面试题与源码阅读方法论)
       * [4.1 LockSupport](#41-locksupport)
 
-   
+
 # architect
 马士兵java架构师课程的一些笔记整理以及代码(src文件夹下有脑图，脑图暂时没有更新)
 ## 多线程与高并发
