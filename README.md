@@ -870,3 +870,86 @@ park()和unpark方法的实现是由unsafe类提供的，而unsafe类是由c和c
 4. 无关细节略过
 
 有那些边界性的东西，在你读第一遍的时候，没有必要的时候，你可以先把它略过
+
+### 5. AQS源码、ThreadLocal原理与源码以及强软弱虚4种引用
+
+#### 5.1 AQS源码
+
+我们来根据ReentrantLock来解读一下AQS源码，根据以下代码来debug跟踪源码
+```java
+import java.util.concurrent.locks.ReentrantLock;
+
+public class TestReentrantLock {
+
+    private static volatile int i = 0;
+
+    public static void main(String[] args) {
+        ReentrantLock lock = new ReentrantLock();
+        lock.lock();
+        i++;
+        lock.unlock();
+    }
+}
+```
+首先在lock.lock()这一行打上断点，然后debug程序，在lock方法里面，我们可以读到它调用了sync.acquire(1),
+源码如下
+```java
+public class ReentrantLock implements Lock, java.io.Serializable {
+    public void lock() {
+        sync.acquire(1);
+    }
+}
+```
+再跟进到acquire(1)里，可以看到acquire(1)里又调用了AQS里的方法，代码如下:
+```java
+public abstract class AbstractQueuedSynchronizer
+    extends AbstractOwnableSynchronizer
+    implements java.io.Serializable {
+    public final void acquire(int arg) {
+        if (!tryAcquire(arg) &&
+            acquireQueued(addWaiter(Node.EXCLUSIVE), arg))
+            selfInterrupt();
+    }
+}
+```
+跟进到tryAcquire(arg)里又调用了NonfairSync的tryAcquire方法，代码如下
+```java
+public class ReentrantLock implements Lock, java.io.Serializable {
+    static final class NonfairSync extends Sync {
+        private static final long serialVersionUID = 7316153563782823691L;
+        protected final boolean tryAcquire(int acquires) {
+            return nonfairTryAcquire(acquires);
+        }
+    }
+}
+```
+跟进到tryAcquire里又调用了nonfairTryAcquire(acquires)
+```java
+abstract static class Sync extends AbstractQueuedSynchronizer {}
+        final boolean nonfairTryAcquire(int acquires) {
+            // 获取当前线程
+            final Thread current = Thread.currentThread();
+            // 拿到AQS核心数值state
+            int c = getState();
+            if (c == 0) {
+                // 给当前线程上锁
+                if (compareAndSetState(0, acquires)) {
+                    // 设置当前线程为独一无二拥有这把锁的线程
+                    setExclusiveOwnerThread(current);
+                    return true;
+                }
+            }
+            // 判断当前线程是否拥有这把锁
+            else if (current == getExclusiveOwnerThread()) {
+                int nextc = c + acquires;
+                if (nextc < 0) // overflow
+                    throw new Error("Maximum lock count exceeded");
+                setState(nextc);
+                return true;
+            }
+            return false;
+        }
+}
+```
+我们跟进到tryAcquire(arg)是拿到了这把锁以后的操作，如果拿不到呢？
+如果拿不到它实际上是调用了
