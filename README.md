@@ -43,6 +43,10 @@
       * [3.9 总结](#39-总结)
     * [4 LockSupport、淘宝面试题与源码阅读方法论](#4-locksupport、淘宝面试题与源码阅读方法论)
       * [4.1 LockSupport](#41-locksupport)
+      * [4.2 面试题](#42-面试题)
+      * [4.3 阅读源码规则](#43-阅读源码规则)
+    * [5. AQS源码、ThreadLocal原理与源码以及强软弱虚4种引用](#5-aqs源码、threadlocal原理与源码以及强软弱虚4种引用)
+      * [5.1 AQS源码](#51-aqs源码)
 
 
 # architect
@@ -874,7 +878,7 @@ park()和unpark方法的实现是由unsafe类提供的，而unsafe类是由c和c
 ### 5. AQS源码、ThreadLocal原理与源码以及强软弱虚4种引用
 
 #### 5.1 AQS源码
-
+![AQS结构图](readme.assets/AQS结构图.png)
 我们来根据ReentrantLock来解读一下AQS源码，根据以下代码来debug跟踪源码
 ```java
 import java.util.concurrent.locks.ReentrantLock;
@@ -952,4 +956,64 @@ abstract static class Sync extends AbstractQueuedSynchronizer {}
 }
 ```
 我们跟进到tryAcquire(arg)是拿到了这把锁以后的操作，如果拿不到呢？
-如果拿不到它实际上是调用了
+如果拿不到它实际上是调用了acquireQueued()方法,acquireQueued()方法就是说没有获得锁的情况下跑到队列里排队去，
+排队的时候需要传递两个参数,第一个参数是某个方法的返回值addWaiter(Node.EXCLUSIVE),来看看这个方法的名字addWaiter,waiter等待者， addWaiter添加一个等待者
+，用什么样的方式呢？Node.EXCLUSIVE排他形式，意思就是把当前线程作为排他形式扔到队列里边
+```java
+public abstract class AbstractQueuedSynchronizer
+    extends AbstractOwnableSynchronizer
+    implements java.io.Serializable {
+    public final void acquire(int arg) {
+        if (!tryAcquire(arg) &&
+            acquireQueued(addWaiter(Node.EXCLUSIVE), arg))
+            selfInterrupt();
+    }
+}
+```
+再来看一下addWaiter方法,这个方法的意思就是说你添加等待者的时候，使用的是什么类型，如果这个线程是
+Node.EXCLUSIVE就是排他锁，Node.SHARED就是共享锁，首先是获得当前要加进等待队列的线程的节点，然后是一个死循环
+```java
+public abstract class AbstractQueuedSynchronizer
+    extends AbstractOwnableSynchronizer
+    implements java.io.Serializable {
+    public final void acquire(int arg) {
+        // 判断是否得到锁 
+        if (!tryAcquire(arg) &&
+            acquireQueued(addWaiter(Node.EXCLUSIVE), arg))
+            selfInterrupt();
+    }
+
+    private Node addWaiter(Node mode) {
+        // 获取当前要加进来的线程的node节点
+        Node node = new Node(mode);
+        for (;;) {
+            // 这里可以看下上面的AQS数据结构图来理解
+            Node oldTail = tail;
+            if (oldTail != null) {
+                node.setPrevRelaxed(oldTail);
+                // CAS操作，把我们这个新节点设置为tail末端
+                if (compareAndSetTail(oldTail, node)) {
+                    oldTail.next = node;
+                    return node;
+                }
+            } else {
+                initializeSyncQueue();
+            }
+        }
+    }
+}
+```
+上面这段代码最重要的就是if (oldTail != null)括号里的这一块了，首先将末端节点赋值给一个oldTail对象，
+再将当前要添加节点的前置节点设置为之前的末端节点，然后利用CAS操作compareAndSetTail(oldTail, node)
+方法，来将某一个节点添加到最后
+
+**通过AQS是如何设置链表尾巴的来理解AQS为啥效率这么高**
+假如你要往一个链表上添加尾巴，尤其是好多线程都要往链表上加上尾巴，普通的方法可能会在这个链表上加个锁，
+但是这样的话，锁的太多太大了，现在AQS的实现并不是锁定的整个链表，而是只观察尾结点tail就可以了，
+怎么做到的呢?compareAndSetTail(oldTail,node)中oldTail是它的预期值，假如说我们想把当前线程插入尾巴上，
+此时另一个线程来了，它插入了一个节点，那么Node oldTail = tail;此时的oldTail不等于新的tail,CAS将不会设置成功,一直循环，
+直到设置成功了为止
+
+**为什么是双向链表**
+其实你要添加一个线程节点的时候，需要看一下前面这个节点的状态，如果前面的节点是持有线程的过程中，这个时候你就得在后面等着，
+如果说前面这个节点已经取消了，那你就应该越过这个节点，不去考虑它的状态，所以你需要看前面节点状态的时候，就必须是双向的
