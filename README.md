@@ -1019,3 +1019,299 @@ public abstract class AbstractQueuedSynchronizer
 
 其实你要添加一个线程节点的时候，需要看一下前面这个节点的状态，如果前面的节点是持有线程的过程中，这个时候你就得在后面等着，
 如果说前面这个节点已经取消了，那你就应该越过这个节点，不去考虑它的状态，所以你需要看前面节点状态的时候，就必须是双向的
+
+**VarHandle**
+再来看一个细节，addWaiter这个方法里面有一个node.setPrevRelaxed(oldTail),这个方法的意思是把当前节点的前置节点设置原来的末端节点tail,
+进入这个方法可以看到PREV.set(this, p),那这个PREV是什么东西呢？当你真正去读这个代码，读的特别细的时候
+你会发现，PREV有这么一个东西叫VARHandle,这个VARHandle是什么呢？这个东西是在JDK1.9之后才有的，我们说一下这个VarHandle，
+Var(variable)叫变量,Handle叫句柄，打个比方，比如我们写了一行代码叫Object o = new Object(); 此时内存里会有一个小的引用"o"指向一段
+大的内存这个内存里是new 的那个object对象，那么这个VarHandle指什么呢？指的是这个"引用"，我们思考一下，如果VarHandle代表"引用"，
+那么VarHandle所代表的这个值PREV是不是也是这个"引用"呢？当然是了。这个时候我们会有一个疑问，本来已经有一个"o"指向这个Object对象了，
+为什么还要用另外一个引用也指向这个对象呢?
+```java
+public abstract class AbstractQueuedSynchronizer
+    extends AbstractOwnableSynchronizer
+    implements java.io.Serializable {
+    public final void acquire(int arg) {
+        // 判断是否得到锁 
+        if (!tryAcquire(arg) &&
+            acquireQueued(addWaiter(Node.EXCLUSIVE), arg))
+            selfInterrupt();
+    }
+
+    private Node addWaiter(Node mode) {
+        // 获取当前要加进来的线程的node节点
+        Node node = new Node(mode);
+        for (;;) {
+            // 这里可以看下上面的AQS数据结构图来理解
+            Node oldTail = tail;
+            if (oldTail != null) {
+                node.setPrevRelaxed(oldTail);
+                // CAS操作，把我们这个新节点设置为tail末端
+                if (compareAndSetTail(oldTail, node)) {
+                    oldTail.next = node;
+                    return node;
+                }
+            } else {
+                initializeSyncQueue();
+            }
+        }
+    }
+        final void setPrevRelaxed(Node p) {
+            PREV.set(this, p);
+        }
+}
+```
+来看下面一个小程序，
+```java
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.VarHandle;
+/**
+* 在JDK1.9之前要操作类里边的成员变量的属性，只能通过反射完成，用反射和用Varhandle的区别在于，
+* VarHandle的效率要高的多，反射每次用之前要检查，VarHandle不需要，
+* VarHandle可以理解为直接操纵二进制码，所以VarHandle比反射效率高很多
+*/
+public class T01_HelloVarHandle {
+
+    int x = 8;
+
+    private static VarHandle handle;
+
+    static {
+        try {
+            // handle指向T01_HelloVarHandle类的X变量引用，这样通过handle也能找到x
+            handle = MethodHandles.lookup().findVarHandle(T01_HelloVarHandle.class, "x", int.class);
+        } catch (NoSuchFieldException e) {
+            e.printStackTrace();
+        } catch (IllegalAccessException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public static void main(String[] args) {
+        T01_HelloVarHandle t = new T01_HelloVarHandle();
+
+        //plain read / write
+        // 通过(int)handle.get(t)拿到x=8
+        System.out.println((int)handle.get(t));
+        handle.set(t,9);
+        System.out.println(t.x);
+
+        // 通过CAS原子性操作修改x的值，如果通过x=100，它会是原子性的吗？当然int是原子性的，但是long类型呢？
+        // 就是说Long类型连x=100都不是原子性的，所以可以借用VarHandle来做原子性操作
+        handle.compareAndSet(t, 9, 10);
+        System.out.println(t.x);
+        
+        // handle.getAndAdd(t, 10)操作也是原子操作，比如说原来写x= x+1，这肯定不是原子操作，因为当你写这一句话的时候，你是需要加锁的，要做到
+        // 线程安全的话是需要加锁的，但是如果通过handle是不需要的，这就是为什么会有Varhandle，
+        // Varhandle除了可以完成普通属性的原子操作，还可以完成原子性的线程安全操作，这也是Varhandle的含义
+        handle.getAndAdd(t, 10);
+        System.out.println(t.x);
+
+    }
+}
+```
+**ThreadLocal**
+
+ThreadLocal是一个线程内部的存储类，可以在指定线程内存储数据，数据存储以后，只有指定线程可以得到存储数据。
+来看一个例子
+```java
+import java.util.concurrent.TimeUnit;
+
+public class ThreadLocal1 {
+	volatile static Person p = new Person();
+	
+	public static void main(String[] args) {
+				
+		new Thread(()->{
+			try {
+				TimeUnit.SECONDS.sleep(2);
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+			
+			System.out.println(p.name);
+		}).start();
+		
+		new Thread(()->{
+			try {
+				TimeUnit.SECONDS.sleep(1);
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+			p.name = "lisi";
+		}).start();
+	}
+}
+
+class Person {
+	String name = "zhangsan";
+}
+```
+首先在类里面new了一个Person对象，并添加了volatile关键字，保证每个线程可见，
+第2个线程睡了1s，并将person的name设置为lisi,那么第一个线程打印出来肯定是lisi了，但是如果我们想让这个对象在每个线程里都有独有的一份，
+怎么办呢?再来看下一段代码
+```java
+import java.util.concurrent.TimeUnit;
+
+public class ThreadLocal2 {
+	static ThreadLocal<Person> tl = new ThreadLocal<>();
+	
+	public static void main(String[] args) {
+				
+		new Thread(()->{
+			try {
+				TimeUnit.SECONDS.sleep(2);
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+			
+			System.out.println(tl.get());
+		}).start();
+		
+		new Thread(()->{
+			try {
+				TimeUnit.SECONDS.sleep(1);
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+			tl.set(new Person());
+		}).start();
+	}
+	
+	static class Person {
+		String name = "zhangsan";
+	}
+}
+
+```
+定义了名为t1的ThreadLocal变量，第二个线程在1s后往t1变量设置了一个person，第一个线程在2s后却获取到的却是null,这是为什么呢?
+原因是如果我们用ThreadLocal的时候，里边设置的这个值是线程独有的，线程独有的是什么意思呢？就是说这个线程里用到这个
+ThreadLocal的时候，只有自己去往里设置，设置的是只有自己线程里才能访问到的Person，而另外一个线程要访问的时候，设置也是自己线程才能访问的person，
+这就是ThreadLocal的含义。
+
+**ThreadLocal源码**
+我们先来看下ThreadLocal源码的set方法，ThreadLocal往里边设置值的时候是怎么设置的呢?首先拿到
+当前线程，然后根据当前线程来获得一个ThreadLocalMap容器，接着往下读会发现值是设置到了map里面，而且这样的，
+key设置的是this,value设置的是我们想要的那个值，这个this就是当前对象ThreadLocal，value就是Person类，这么理解
+就行，如果map不等于空的情况下就设置进去就行了，如果等于空就创建一个map.我们回头看下这个map，ThreadLocalMap map = getMap(t);
+这个map到底在哪里呢，点击getMap这个方法可以看到，它的返回值是t.threadLocals
+```java
+public class ThreadLocal<T> {
+    public void set(T value) {
+        Thread t = Thread.currentThread();
+        ThreadLocalMap map = getMap(t);
+        if (map != null) {
+            map.set(this, value);
+        } else {
+            createMap(t, value);
+        }
+    }
+    ThreadLocalMap getMap(Thread t) {
+        return t.threadLocals;
+    }
+}
+```
+我们进入这个t.threadLocals,你会发现ThreadLocalMap这个东西在哪里呢?居然在Thread这个类里面，所以说这个map是存在
+Thread里的
+```java
+public class Thread implements Runnable{
+ThreadLocal.ThreadLocalMap threadLocals = null;
+}
+```
+这个时候我们应该明白,map的set方法其实就是设置当前线程里面的map;所以上述ThreadLocal2类中第二个线程设置的value，但是第一个线程获取不到，
+读了源码后我们明白了，原来值是存放到不同的map当中去，所以搜索不到。
+
+**为什么要用ThreadLocal**
+
+我们根据spring的声明书事务来解析，为什么要用ThreadLocal，声明式事务一般来讲我们是要通过数据库的，但是
+我们知道Spring结合Mybatis，我们是可以把整个事务写在配置文件中的，而这个配置文件里的事务，它实际上是管理了一系列的方法，
+方法1、方法2、方法3.。而这些方法里面可能写了，比如说第1个方法写了去配置文件拿到数据库连接Connection，第2个、第3个都是一样去拿数据库连接，然后声明式事务
+可以把这几个方法合在一起，视为一个完整的事务，如果说在这些方法里，每一个方法拿的连接都不是同一个对象，你觉得这个东西能形成一个完整的事务吗？Connection
+会放到一个连接池里边，如果第一个方法拿的是第1个connection、第2个拿的是第2个、第3个拿的是第3个，这东西能形成一个事务吗？
+绝对是不可能的，那怎么保证这么多connection之间是同一个connection呢？把这个Connection放到这个线程的本地对象里ThreadLocal里面，
+以后再拿的时候，实际上我是从ThreadLocal里拿，第1个方法拿的时候就把connection放到ThreadLocal里面，后面的方法要拿的时候，从ThreadLocal里面拿，
+不从线程池拿。
+
+**java强软弱虚4种引用**
+
+**強引用**：存在强引用，垃圾回收器将不会回收该对象
+```java
+import java.io.IOException;
+
+public class T01_NormalReference {
+    public static void main(String[] args) throws IOException {
+        M m = new M();
+        // 如果m=null這行代码注释掉，对象M将不会回收，因为有一个引用指向它
+        m = null;
+        System.gc(); //DisableExplicitGC
+
+        // 因为System.gc()是跑在别的线程里边的，如果main线程直接退出了,那么整个程序就退出了，那gc不gc就没什么意义了，
+        // 所以要阻塞当前线程，让垃圾回收器正常GC
+        System.in.read();
+    }
+}
+```
+**软引用**
+软引用是用来描述一些还有用但并非必须的对象。
+对于软引用关联着的对象，在系统将要发生内存溢出异常之前，将会把这些对象列进回收范围进行第二次回收。
+如果这次回收还没有足够的内存，才会抛出内存溢出异常。
+```java
+import java.lang.ref.SoftReference;
+
+/**
+ * -Xmx20M
+ */
+public class T02_SoftReference {
+    public static void main(String[] args) {
+        SoftReference<byte[]> m = new SoftReference<>(new byte[1024*1024*10]);
+        //m = null;
+        System.out.println(m.get());
+        System.gc();
+        try {
+            Thread.sleep(500);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        System.out.println(m.get());
+
+        //再分配一个数组，heap将装不下，这时候系统会垃圾回收，先回收一次，如果不够，会把软引用干掉
+        byte[] b = new byte[1024*1024*15];
+        System.out.println(m.get());
+    }
+}
+
+//软引用非常适合缓存使用
+```
+上面这段代码，我们在运行之前，需要先设置一下堆内存最大为20MB，如果不设置它永远不会回收的，这个时候运行程序
+你会发现，第3次调用m.get()输出的时候，输出的值为null，来分析一下，我们程序默认堆最大大小为20MB,
+SoftReference指向的字节数组分配了10MB，这个时候内存是放得下的，这个时候调用gc来回收是无法回收的，因为堆内存够用，
+第二次创建字节数组的时候分配了15MB，这个时候堆内存还够15MB吗？肯定是不够的，不够了怎么办？清理，清理的时候既然内存
+不够用，就会把这个软引用干掉，然后15MB内存分配进去，所以这个时候你再去get第一个字节数组的时候它是一个null值，这就是软引用的含义。
+
+<h3>软引用的使用场景：</h3>主要适合做缓存用。比如说从数据库读一大堆数据出来，访问比较多的话，如果内存里边有的话，我就不从数据库里拿了，这个时候我也可以
+使用软引用，需要新的空间你可以把我干掉，没问题我下次从数据库取就可以了，如果新空间还够用的时候，我下次就不用从数据
+库取，直接从内存里拿就行了
+
+**弱引用**
+
+弱引用的意思是，只要遭遇gc就会回收，只要垃圾回收看到这个引用是一个特别弱的引用指向的时候，就直接把它给干掉
+
+```java
+import java.lang.ref.WeakReference;
+
+public class T03_WeakReference {
+    public static void main(String[] args) {
+        WeakReference<M> m = new WeakReference<>(new M());
+
+        System.out.println(m.get());
+        System.gc();
+        System.out.println(m.get());
+    }
+}
+```
+
+**强软弱虚引用的区别**
+1.强引用：存在强引用，垃圾回收器将不会回收该对象
+2.软引用：只有系统内存不够的时候，才会回收它
+3.弱引用：只要遭遇gc就会回收
