@@ -47,6 +47,15 @@
       * [4.3 阅读源码规则](#43-阅读源码规则)
     * [5. AQS源码、ThreadLocal原理与源码以及强软弱虚4种引用](#5-aqs源码、threadlocal原理与源码以及强软弱虚4种引用)
       * [5.1 AQS源码](#51-aqs源码)
+      * [5.2 VarHandle](#52-varhandle)
+      * [5.3 ThreadLocal](#53-threadlocal)
+      * [5.3.1 ThreadLocal使用](#531-threadlocal使用)
+        * [5.3.2 ThreadLocal源码](#532-threadlocal源码)
+      * [5.4 java强软弱虚4种引用](#54-java强软弱虚4种引用)
+        * [5.4.1 強引用](#541-強引用)
+        * [5.4.2 软引用](#542-软引用)
+        * [5.4.3 弱引用](#543-弱引用)
+        * [5.4.4 虚引用](#544-虚引用)
 
 
 # architect
@@ -188,6 +197,7 @@ lock.lock()、lock.unlock() API使用
 并且手动解锁一定要写在try...finally里面保证最好一定要解锁，不然的话锁上之后中间执行过程有问题就死在那了，别人永远也拿不到这把锁了
 
 ```java
+public class T01_ReentrantLock1 {
 	void m1() {
 		try {
 			lock.lock(); //synchronized(this)
@@ -202,6 +212,7 @@ lock.lock()、lock.unlock() API使用
 			lock.unlock();
 		}
 	}
+}
 ```
 
 
@@ -266,6 +277,11 @@ countDownLatch.await()
 举例：在某些业务情况下，要求我们等某个条件或者任务完成后才可以继续处理后续任务。
 同时在线程完成时也会触发一定事件。方便业务继续向下执行
 ```java
+public class T06_TestCountDownLatch {
+    public static void main(String[] args) {
+//        usingJoin();
+        usingCountDownLatch();
+    }
     private static void usingCountDownLatch() {
         Thread[] threads = new Thread[100];
         CountDownLatch latch = new CountDownLatch(threads.length);
@@ -291,6 +307,7 @@ countDownLatch.await()
 
         System.out.println("end latch");
     }
+}
 ```
 
 #### 3.4 CyclicBarrier
@@ -929,7 +946,7 @@ public class ReentrantLock implements Lock, java.io.Serializable {
 ```
 跟进到tryAcquire里又调用了nonfairTryAcquire(acquires)
 ```java
-abstract static class Sync extends AbstractQueuedSynchronizer {}
+abstract static class Sync extends AbstractQueuedSynchronizer {
         final boolean nonfairTryAcquire(int acquires) {
             // 获取当前线程
             final Thread current = Thread.currentThread();
@@ -1020,7 +1037,7 @@ public abstract class AbstractQueuedSynchronizer
 其实你要添加一个线程节点的时候，需要看一下前面这个节点的状态，如果前面的节点是持有线程的过程中，这个时候你就得在后面等着，
 如果说前面这个节点已经取消了，那你就应该越过这个节点，不去考虑它的状态，所以你需要看前面节点状态的时候，就必须是双向的
 
-**VarHandle**
+#### 5.2 VarHandle
 再来看一个细节，addWaiter这个方法里面有一个node.setPrevRelaxed(oldTail),这个方法的意思是把当前节点的前置节点设置原来的末端节点tail,
 进入这个方法可以看到PREV.set(this, p),那这个PREV是什么东西呢？当你真正去读这个代码，读的特别细的时候
 你会发现，PREV有这么一个东西叫VARHandle,这个VARHandle是什么呢？这个东西是在JDK1.9之后才有的，我们说一下这个VarHandle，
@@ -1111,8 +1128,9 @@ public class T01_HelloVarHandle {
     }
 }
 ```
-**ThreadLocal**
+#### 5.3 ThreadLocal
 
+#### 5.3.1 ThreadLocal使用
 ThreadLocal是一个线程内部的存储类，可以在指定线程内存储数据，数据存储以后，只有指定线程可以得到存储数据。
 来看一个例子
 ```java
@@ -1190,7 +1208,7 @@ public class ThreadLocal2 {
 ThreadLocal的时候，只有自己去往里设置，设置的是只有自己线程里才能访问到的Person，而另外一个线程要访问的时候，设置也是自己线程才能访问的person，
 这就是ThreadLocal的含义。
 
-**ThreadLocal源码**
+##### 5.3.2 ThreadLocal源码
 我们先来看下ThreadLocal源码的set方法，ThreadLocal往里边设置值的时候是怎么设置的呢?首先拿到
 当前线程，然后根据当前线程来获得一个ThreadLocalMap容器，接着往下读会发现值是设置到了map里面，而且这样的，
 key设置的是this,value设置的是我们想要的那个值，这个this就是当前对象ThreadLocal，value就是Person类，这么理解
@@ -1233,8 +1251,9 @@ ThreadLocal.ThreadLocalMap threadLocals = null;
 以后再拿的时候，实际上我是从ThreadLocal里拿，第1个方法拿的时候就把connection放到ThreadLocal里面，后面的方法要拿的时候，从ThreadLocal里面拿，
 不从线程池拿。
 
-**java强软弱虚4种引用**
+#### 5.4 java强软弱虚4种引用
 
+##### 5.4.1 強引用
 **強引用**：存在强引用，垃圾回收器将不会回收该对象
 ```java
 import java.io.IOException;
@@ -1252,6 +1271,8 @@ public class T01_NormalReference {
     }
 }
 ```
+##### 5.4.2 软引用
+
 **软引用**
 软引用是用来描述一些还有用但并非必须的对象。
 对于软引用关联着的对象，在系统将要发生内存溢出异常之前，将会把这些对象列进回收范围进行第二次回收。
@@ -1293,6 +1314,8 @@ SoftReference指向的字节数组分配了10MB，这个时候内存是放得下
 使用软引用，需要新的空间你可以把我干掉，没问题我下次从数据库取就可以了，如果新空间还够用的时候，我下次就不用从数据
 库取，直接从内存里拿就行了
 
+##### 5.4.3 弱引用
+
 **弱引用**
 
 弱引用的意思是，只要遭遇gc就会回收，只要垃圾回收看到这个引用是一个特别弱的引用指向的时候，就直接把它给干掉
@@ -1307,11 +1330,129 @@ public class T03_WeakReference {
         System.out.println(m.get());
         System.gc();
         System.out.println(m.get());
+        ThreadLocal<M> tl = new ThreadLocal<>();
+        tl.set(new M());
+        tl.remove();
+
     }
 }
 ```
+
+**ThreadLocal中的注意点**
+在threadLocal的set方法中，往里面放的数据是一个entry，它的父类是一个WeakReference,
+这个里面装的是什么?是ThreadLocal对象，也就是说一个Entry一个key一个value,而这个Entry的key的
+类型是ThreadLocal，这个value当然就是我们需要往threadLocal对象里塞的值，这个不重要，看一下
+Entry的构造方法，调用了super(k),这个方法相当于new WeakReference<ThreadLocal<k>>,
+这时候我们应该明白map里的key是通过一个弱引用指向了一个ThreadLocal对象，这样的话，当强引用tl回收以后，ThreadLocal对象就会自动回收了
+```java
+public class ThreadLocal<T> {
+        private void set(ThreadLocal<?> key, Object value) {
+            Entry[] tab = table;
+            int len = tab.length;
+            int i = key.threadLocalHashCode & (len-1);
+
+            for (Entry e = tab[i];
+                 e != null;
+                 e = tab[i = nextIndex(i, len)]) {
+                ThreadLocal<?> k = e.get();
+
+                if (k == key) {
+                    e.value = value;
+                    return;
+                }
+
+                if (k == null) {
+                    replaceStaleEntry(key, value, i);
+                    return;
+                }
+            }
+
+            tab[i] = new Entry(key, value);
+            int sz = ++size;
+            if (!cleanSomeSlots(i, sz) && sz >= threshold)
+                rehash();
+        }
+    static class ThreadLocalMap {
+
+       static class Entry extends WeakReference<ThreadLocal<?>> {
+            /** The value associated with this ThreadLocal. */
+            Object value;
+
+            Entry(ThreadLocal<?> k, Object v) {
+                super(k);
+                value = v;
+            }
+        }
+}
+}
+```
+
+关于ThreadLocal还有一个问题，当我们tl这个强引用消失了,key的指向也被回收了，可是很不幸的是这个key
+指向了一个null值，但是这个threadLocals的map是永远存在的，相当于说key/value对，你的key为null，
+value指向的东西，你的这个10MB的字节码，你还能访问到吗?访问不到了，如果map越积攒越多，它还是会内存泄露，怎么办呢?
+所以必须记住这一点,使用ThreadLocal里面的对象不用了，务必要remove掉，不然还会有内存泄露
+
+##### 5.4.4 虚引用
+
+**虚引用**
+虚引用主要是用来管理堆外内存的。虚引用的构造方法至少都是两个参数，第二个参数还必须是一个队列，虚引用基本没人用，
+就是说不是给你用的，那么它是给谁用的呢？是给写虚拟机的人用的。示例代码如下
+```java
+import java.lang.ref.PhantomReference;
+import java.lang.ref.Reference;
+import java.lang.ref.ReferenceQueue;
+import java.util.LinkedList;
+import java.util.List;
+
+public class T04_PhantomReference {
+    private static final List<Object> LIST = new LinkedList<>();
+    private static final ReferenceQueue<M> QUEUE = new ReferenceQueue<>();
+
+
+
+    public static void main(String[] args) {
+
+
+        PhantomReference<M> phantomReference = new PhantomReference<>(new M(), QUEUE);
+
+
+        new Thread(() -> {
+            while (true) {
+                LIST.add(new byte[1024 * 1024]);
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                    Thread.currentThread().interrupt();
+                }
+                System.out.println(phantomReference.get());
+            }
+        }).start();
+
+        new Thread(() -> {
+            while (true) {
+                Reference<? extends M> poll = QUEUE.poll();
+                if (poll != null) {
+                    System.out.println("--- 虚引用对象被jvm回收了 ---- " + poll);
+                }
+            }
+        }).start();
+
+        try {
+            Thread.sleep(500);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+
+    }
+}
+```
+上述代码调用phantomReference.get()方法时，每次输出的都是null，因为虚引用与弱引用不同，弱引用里面有值的时候你是可以get到的，
+而虚引用你是get不到的，而是一但把某个虚引用回收的时候，会装到这个队列里,让你接收一个通知，什么时候你检测到这个队列里面如果有一个引用
+存在了，那说明什么呢?说明这个虚引用被回收了。这个虚引用指向任何对象，垃圾回收二话不说就把这个M对象干掉
 
 **强软弱虚引用的区别**
 1.强引用：存在强引用，垃圾回收器将不会回收该对象
 2.软引用：只有系统内存不够的时候，才会回收它
 3.弱引用：只要遭遇gc就会回收
+4.虚引用：垃圾回收会二话不说把虚引用指向的对象给干掉，主要用来管理对外内存
