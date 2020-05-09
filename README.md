@@ -895,7 +895,9 @@ park()和unpark方法的实现是由unsafe类提供的，而unsafe类是由c和c
 ### 5. AQS源码、ThreadLocal原理与源码以及强软弱虚4种引用
 
 #### 5.1 AQS源码
+
 ![AQS结构图](readme.assets/AQS结构图.png)
+
 我们来根据ReentrantLock来解读一下AQS源码，根据以下代码来debug跟踪源码
 ```java
 import java.util.concurrent.locks.ReentrantLock;
@@ -1038,6 +1040,7 @@ public abstract class AbstractQueuedSynchronizer
 如果说前面这个节点已经取消了，那你就应该越过这个节点，不去考虑它的状态，所以你需要看前面节点状态的时候，就必须是双向的
 
 #### 5.2 VarHandle
+
 再来看一个细节，addWaiter这个方法里面有一个node.setPrevRelaxed(oldTail),这个方法的意思是把当前节点的前置节点设置原来的末端节点tail,
 进入这个方法可以看到PREV.set(this, p),那这个PREV是什么东西呢？当你真正去读这个代码，读的特别细的时候
 你会发现，PREV有这么一个东西叫VARHandle,这个VARHandle是什么呢？这个东西是在JDK1.9之后才有的，我们说一下这个VarHandle，
@@ -1130,7 +1133,8 @@ public class T01_HelloVarHandle {
 ```
 #### 5.3 ThreadLocal
 
-#### 5.3.1 ThreadLocal使用
+##### 5.3.1 ThreadLocal使用
+
 ThreadLocal是一个线程内部的存储类，可以在指定线程内存储数据，数据存储以后，只有指定线程可以得到存储数据。
 来看一个例子
 ```java
@@ -1209,6 +1213,7 @@ ThreadLocal的时候，只有自己去往里设置，设置的是只有自己线
 这就是ThreadLocal的含义。
 
 ##### 5.3.2 ThreadLocal源码
+
 我们先来看下ThreadLocal源码的set方法，ThreadLocal往里边设置值的时候是怎么设置的呢?首先拿到
 当前线程，然后根据当前线程来获得一个ThreadLocalMap容器，接着往下读会发现值是设置到了map里面，而且这样的，
 key设置的是this,value设置的是我们想要的那个值，这个this就是当前对象ThreadLocal，value就是Person类，这么理解
@@ -1254,6 +1259,7 @@ ThreadLocal.ThreadLocalMap threadLocals = null;
 #### 5.4 java强软弱虚4种引用
 
 ##### 5.4.1 強引用
+
 **強引用**：存在强引用，垃圾回收器将不会回收该对象
 ```java
 import java.io.IOException;
@@ -1274,6 +1280,7 @@ public class T01_NormalReference {
 ##### 5.4.2 软引用
 
 **软引用**
+
 软引用是用来描述一些还有用但并非必须的对象。
 对于软引用关联着的对象，在系统将要发生内存溢出异常之前，将会把这些对象列进回收范围进行第二次回收。
 如果这次回收还没有足够的内存，才会抛出内存溢出异常。
@@ -1339,6 +1346,7 @@ public class T03_WeakReference {
 ```
 
 **ThreadLocal中的注意点**
+
 在threadLocal的set方法中，往里面放的数据是一个entry，它的父类是一个WeakReference,
 这个里面装的是什么?是ThreadLocal对象，也就是说一个Entry一个key一个value,而这个Entry的key的
 类型是ThreadLocal，这个value当然就是我们需要往threadLocal对象里塞的值，这个不重要，看一下
@@ -1395,6 +1403,7 @@ value指向的东西，你的这个10MB的字节码，你还能访问到吗?访�
 ##### 5.4.4 虚引用
 
 **虚引用**
+
 虚引用主要是用来管理堆外内存的。虚引用的构造方法至少都是两个参数，第二个参数还必须是一个队列，虚引用基本没人用，
 就是说不是给你用的，那么它是给谁用的呢？是给写虚拟机的人用的。示例代码如下
 ```java
@@ -1452,6 +1461,7 @@ public class T04_PhantomReference {
 存在了，那说明什么呢?说明这个虚引用被回收了。这个虚引用指向任何对象，垃圾回收二话不说就把这个M对象干掉
 
 **强软弱虚引用的区别**
+
 1.强引用：存在强引用，垃圾回收器将不会回收该对象
 2.软引用：只有系统内存不够的时候，才会回收它
 3.弱引用：只要遭遇gc就会回收
