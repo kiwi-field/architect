@@ -59,7 +59,7 @@
 
 
 # architect
-马士兵java架构师课程的一些笔记整理以及代码(src文件夹下有脑图，脑图暂时没有更新)
+马士兵java架构师课程的一些笔记整理以及代码(想系统学习，请购买正版)
 ## 多线程与高并发
 ### 1.基础概念
 
@@ -1466,3 +1466,205 @@ public class T04_PhantomReference {
 2.软引用：只有系统内存不够的时候，才会回收它<br>
 3.弱引用：只要遭遇gc就会回收<br>
 4.虚引用：垃圾回收会二话不说把虚引用指向的对象给干掉，主要用来管理对外内存<br>
+
+### 6.并发容器
+
+![并发容器](readme.assets/并发容器.png)
+
+#### 6.1 容器简介
+
+容器这节是比较重要的，也是在面试中必问的一个知识点，为什么爱问呢？主要有以下几点：<br>
+1.往容器里装东西牵扯到数据结构<br>
+2.有数据结构肯定牵扯到算法<br>
+3.容器本身的组织结构也是比较重要的<br>
+4.容器牵扯到并发<br>
+
+容器的第一大类Collection叫集合，集合的意思是不管你这个容器是什么结构你可以把元素一个一个往里面扔；<br>
+容器的第二大类是Map，Map是一对一对的往里扔。其实Map算是Collection一个特殊的变种，你可以把一对对象看成一个entry对象，所以这也是一个整个的对象。<br>
+总得来说，java容器分为两大接口:Map是一对一对的。Collection是一个一个的，Collection又分为三大类List、Set、Queue队列，队列就是一对一队的，往这个队列里
+取数据的时候它和List、Size都不一样。大家知道，List底层是数组的话还可以取到其中一个。Set主要和其他的区别就是
+存储的元素是唯一的，不会有重复元素，这个是主要区别。
+
+Queue实际上就是一个队列，有进又出，并且在这个基础上实现了很多多线程的访问方法(比如put阻塞式的放，take阻塞式的取)，
+这个是在其他的List、set里面都是没有的。队列最主要的原因是为了实现任务的装载的这种取和装**这里面最重要的就是叫做阻塞队列，它的实现
+初衷就是为了线程池、高并发做准备的。**
+
+#### 6.2 HashTable
+
+最开始java1.0的容器里只有两个，第一个叫Vector可以单独往里面扔数据，还有一个是HashTable是可以一对一对往里面扔的。
+Vector实现了List接口、HashTable实现了Map接口。但是这个两个容器在1.0设计的时候稍微有点问题。这两个容器的所有方法都设计
+成了synchronized的，这是它最早设计不太合理的地方。很多时候我们都是单线程在工作，所以这时候你完全没必要加synchronized，
+因此最开始的时候设计的时候性能比较差，所以后来它意识到了这一点，在HashTable之后又添加了Sun公司又添加了HashMap，说HashMap比HashTable好用，
+HashMap是完全没有加锁，一个是所有方法都不加锁，一个是所有方法都加了锁。这两个除了加锁区别外，还有一些源码上的区别。
+
+但是HashMap没有锁怎么办呢？所以在jdk1.2中，它又添加了一个Collections这个类，相当于这个容器的工具类，这个工具类
+里有一个方法叫syncchronizedMap，这个方法会把它变成加锁的版本，所以HashMap有两个版本。
+
+Vector和HashTable自带锁，基本不用，大家记住这个结论
+
+#### 6.3 ConcurrentHashMap
+
+ConcurrentHashMap这个容器是多线程里面真正用的，以后我们多线程基本都是用它，用Map的时候，并发的。这个
+ConcurrentHashMap提高效率主要提高在读上面，由于它往里插的时候内部又做了各种各样的判断，本来是链表的，到8之后又变成红黑树，然后
+里面又做了各种各样的cas的判断，所以他往里插的数据是要更低一些的。HashMap和HashTable虽然说读的效率会稍微低一些，但是它
+往里插的时候检查的东西特别的少，就加个锁然后往里一插。所以，关于效率，还是看你实际当中的需求。
+
+#### 6.4 Vector到Queue的发展历程
+
+我们来通过以下小程序来认识一下Vector到Queue的发展历程，看一个非常有意思的程序。
+
+问题:
+
+有N张火车票，每张票都有一个编号,同时有10个窗口对外售票,请写一个模拟程序
+
+ **ArrayList实现**
+ ```java
+import java.util.ArrayList;
+import java.util.List;
+
+public class TicketSeller1 {
+	static List<String> tickets = new ArrayList<>();
+	
+	static {
+		for(int i=0; i<10000; i++) tickets.add("票编号：" + i);
+	}
+	
+	
+	
+	public static void main(String[] args) {
+		for(int i=0; i<10; i++) {
+			new Thread(()->{
+				while(tickets.size() > 0) {
+					System.out.println("销售了--" + tickets.remove(0));
+				}
+			}).start();
+		}
+	}
+}
+```
+上述代码中一上来就通过static块初始化了10000张票，，然后10个线程也就是10个窗口来对外售票，只要size大于0，只要
+还有剩余的票时我就往外卖，取一张往外卖remove。但是到最后一张票的时候，好几个线程执行到这里发现size大于零，所有的线程都往外卖了一张票，那么会发现
+什么情景呢，只有一个线程拿到了这张票，其他线程拿到的都是空值，出现了超卖现象，没有加锁，线程不安全。
+
+**Vector实现**
+
+```java
+import java.util.Vector;
+import java.util.concurrent.TimeUnit;
+
+public class TicketSeller2 {
+	static Vector<String> tickets = new Vector<>();
+	
+	
+	static {
+		for(int i=0; i<1000; i++) tickets.add("票 编号：" + i);
+	}
+	
+	public static void main(String[] args) {
+		
+		for(int i=0; i<10; i++) {
+			new Thread(()->{
+
+				while(tickets.size() > 0) {
+						try {
+							TimeUnit.MILLISECONDS.sleep(10);
+						} catch (InterruptedException e) {
+							e.printStackTrace();
+						}
+
+
+						System.out.println("销售了--" + tickets.remove(0));
+					}
+			}).start();
+		}
+	}
+}
+```
+来看看Vector实现,Vector内部是自带锁的，你去读它的时候就会看到很多方法synchronized二话不说先加上锁
+再说。所以你在用Vector的时候请放心它一定是线程安全的。虽然size方法和remove方法都有锁，但是执行上述代码，结果还是不对，
+可是很不幸的是在这两个方法之间没有加锁，所以又出现了超卖现象
+
+**LinkedList实现**
+```java
+import java.util.LinkedList;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
+
+public class TicketSeller3 {
+	static List<String> tickets = new LinkedList<>();
+	
+	
+	static {
+		for(int i=0; i<1000; i++) tickets.add("票 编号：" + i);
+	}
+	
+	public static void main(String[] args) {
+		
+		for(int i=0; i<10; i++) {
+			new Thread(()->{
+				while(true) {
+					synchronized(tickets) {
+						if(tickets.size() <= 0) break;
+						
+						try {
+							TimeUnit.MILLISECONDS.sleep(10);
+						} catch (InterruptedException e) {
+							e.printStackTrace();
+						}
+						
+						System.out.println("销售了--" + tickets.remove(0));
+					}
+				}
+			}).start();
+		}
+	}
+}
+```
+该LinkedList实现是在查询size和remove外加了一把锁，保证同时只能有1个窗口去查询并且售票，
+这个就没有问题了，他会实实在在的往外销售，但不是效率最高的方案
+
+**Queue实现**
+
+```java
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.LongAdder;
+
+public class TicketSeller4 {
+	static Queue<String> tickets = new ConcurrentLinkedQueue<>();
+	private static LongAdder longAdder = new LongAdder();
+
+	static {
+		for(int i=0; i<1000; i++) tickets.add("票 编号：" + i);
+	}
+	
+	public static void main(String[] args) throws InterruptedException {
+		Thread[] threads = new Thread[10];
+		for(int i=0; i<10; i++) {
+			threads[i] = new Thread(() -> {
+				while (true) {
+					String s = tickets.poll();
+					if (s == null) break;
+					else {
+						longAdder.increment();
+						System.out.println("销售了--" + s);
+					}
+				}
+			});
+			threads[i].start();
+		}
+
+		for (Thread thread : threads) {
+			thread.join();
+		}
+		System.out.println("一共销售了多少张票?"+ longAdder.longValue());
+	}
+}
+
+```
+效率最高的就是这个Queue，这是一个最新的接口，他的目标就是为了高并发用的，就是为了多线程用的。所以，
+以后考虑多线程这种单个元素的时候多考虑Queue。这里用的是ConcurrentLinkedQueue，然而里面并没有加锁，
+直接调用了一个poll方法，poll的意思就是从tickets取值，这个值取空了就说明里面的值已经没有了，所以在while循环
+中先去tickets取数据，取不到就把这个窗口关了。
+
+poll的意思是移除并返问队列头部的元素，如果队列为空，则返回null
