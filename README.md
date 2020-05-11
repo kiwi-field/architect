@@ -1673,3 +1673,31 @@ public class TicketSeller4 {
 中先去tickets取数据，取不到就把这个窗口关了。
 
 poll的意思是移除并返问队列头部的元素，如果队列为空，则返回null
+
+#### 6.5 ConcurrentMap
+    
+我们来看这个经常在多线程的情况下使用的这些容器，从Map开始讲，Map经常用的有这么几个
+
+ConcurrentHashMap用hash表实现的这样一个高并发容器；既然有了ConcurrentHashMap正常情况下就应该有ConcurrentTreeMap，你可以去
+查查，它没有，就等于缺了一块，为什么没有呢，原因是ConcurrentHashMap里面用的是cas操作，这个cas操作它用在tree的时候，用在树这个节点上的时候实现
+起来太复杂了，所以就没有ConcurrentTreeMap，但有时也需要这样一个排好序的Map，那就有了ConcurrentSkipList跳表结构就出现了。
+
+ConcurrentSkipListMap通过跳表来实现的高并发容器并且这个Map是有排序的；
+![跳表](readme.assets/跳表.png)    
+
+跳表是什么样的结构呢?
+
+跳表底层本身是一个存储元素的链表，它是排好序的，大家都知道
+当一个链表排好序的时候往里插入是特别困难的，查找的时候也特别麻烦，
+因为你得从头去遍历查找这个元素到底在哪里，所以就出现了跳表这个结构，
+底层是一个链表，链表查找困难怎么办，那么在这些链表的基础上再拿出
+一些关键元素来，在上面做一层，那这个关键元素的着一层也是一个链表，
+数量要是特别大的话在这个基础上再拿出一层出来再做一个链表，每层的数据越来越少，而且是分层的，在我们查找的时候从顶层往下开始查找，所以查找容易了很多，同时它无锁的
+实现难度比TreeMap又容易很多，因此在JUC里面提供了ConcurrentSkipListMap这个类
+
+ConcurrentHashMap和ConcurrentSkipListMap相同点和区别
+
+相同点：<br>
+1.两种都适用于高并发场景<br>
+不同点：
+1.ConcurrentSkipListMap是高并发并且排序
