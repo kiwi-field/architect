@@ -61,6 +61,7 @@
       * [6.2 HashTable](#62-hashtable)
       * [6.3 ConcurrentHashMap](#63-concurrenthashmap)
       * [6.4 Vector到Queue的发展历程](#64-vector到queue的发展历程)
+      * [6.5 ConcurrentMap](#65-concurrentmap)
 
 
 # architect
