@@ -49,13 +49,18 @@
       * [5.1 AQS源码](#51-aqs源码)
       * [5.2 VarHandle](#52-varhandle)
       * [5.3 ThreadLocal](#53-threadlocal)
-      * [5.3.1 ThreadLocal使用](#531-threadlocal使用)
+        * [5.3.1 ThreadLocal使用](#531-threadlocal使用)
         * [5.3.2 ThreadLocal源码](#532-threadlocal源码)
       * [5.4 java强软弱虚4种引用](#54-java强软弱虚4种引用)
         * [5.4.1 強引用](#541-強引用)
         * [5.4.2 软引用](#542-软引用)
         * [5.4.3 弱引用](#543-弱引用)
         * [5.4.4 虚引用](#544-虚引用)
+    * [6.并发容器](#6并发容器)
+      * [6.1 容器简介](#61-容器简介)
+      * [6.2 HashTable](#62-hashtable)
+      * [6.3 ConcurrentHashMap](#63-concurrenthashmap)
+      * [6.4 Vector到Queue的发展历程](#64-vector到queue的发展历程)
 
 
 # architect
