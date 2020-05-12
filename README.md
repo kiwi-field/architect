@@ -62,6 +62,12 @@
       * [6.3 ConcurrentHashMap](#63-concurrenthashmap)
       * [6.4 Vector到Queue的发展历程](#64-vector到queue的发展历程)
       * [6.5 ConcurrentMap](#65-concurrentmap)
+      * [6.6 CopyOnWrite](#66-copyonwrite)
+      * [6.7 BlockingQueue](#67-blockingqueue)
+      * [6.8 LinkedBlockingQueue](#68-linkedblockingqueue)
+      * [6.8 ArrayBlockingQueue](#68-arrayblockingqueue)
+      * [6.9 DelayQueue](#69-delayqueue)
+      * [6.10 SynchronousQueue](#610-synchronousqueue)
 
 
 # architect
@@ -1702,3 +1708,319 @@ ConcurrentHashMap和ConcurrentSkipListMap相同点和区别
 1.两种都适用于高并发场景<br>
 不同点：
 1.ConcurrentSkipListMap是高并发并且排序
+
+#### 6.6 CopyOnWrite
+
+再来说一个在并发的时候经常使用的一个类，这个类叫CopyOnWrite，CopyOnWriteList、CopyOnWriteSet有两个。CopyOnWrite叫写时复制。
+
+看下面程序，用了容器，100个线程，每个线程往里面放1000条数据，可以用ArrayList、Vector、但是ArrayList会有并发问题，
+因为多线程访问没有加锁,可以用CopyOnWriteArrayList。CopyOnWrite名为写时复制，原理很简单，当我们需要往里面加元素的时候你把里面的
+元素复制出来。很多时候，读多写少，可以考虑CopyOWrite这种方式来提高效率，CopyOnWrite为什么会提高效率呢？因为写的时候不加锁，大家都知道
+我Vector读写的时候都加锁。用CopyOnWrite我读的时候不加锁，写的时候会在原来的基础上拷贝一个，拷贝的时候扩展出一个新元素来，
+然后把你新添加的这个扔到这个元素中，再把容器的一个引用指向新的，这就是写时复制
+
+```java
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Random;
+import java.util.Vector;
+import java.util.concurrent.CopyOnWriteArrayList;
+
+public class T02_CopyOnWriteList {
+	public static void main(String[] args) {
+		List<String> lists = 
+//				new ArrayList<>(); //这个会出并发问题！
+//				new Vector();
+				new CopyOnWriteArrayList<>();
+		Random r = new Random();
+		Thread[] ths = new Thread[100];
+		
+		for(int i=0; i<ths.length; i++) {
+			Runnable task = new Runnable() {
+	
+				@Override
+				public void run() {
+					for(int i=0; i<1000; i++) lists.add("a" + r.nextInt(10000));
+				}
+				
+			};
+			ths[i] = new Thread(task);
+		}
+		
+		
+		runAndComputeTime(ths);
+		
+		System.out.println(lists.size());
+	}
+	
+	static void runAndComputeTime(Thread[] ths) {
+		long s1 = System.currentTimeMillis();
+		Arrays.asList(ths).forEach(t->t.start());
+		Arrays.asList(ths).forEach(t->{
+			try {
+				t.join();
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+		});
+		long s2 = System.currentTimeMillis();
+		System.out.println(s2 - s1);
+		
+	}
+}
+
+```
+#### 6.7 BlockingQueue
+
+BlockingQueue是后面讲线程池需要用到这方面的内容，是给线程池做准备的。<br>
+BlockingQueue的概念重点是在Blocking上，Blocking阻塞、Queue队列，是阻塞队列。他提供了一系列的方法，我们可以
+在这些方法的基础之上做到让线程实现自动的阻塞。
+
+这个Queue提供了一些多线程比较友好的API，
+
+offer(): 会返回有没有加入成功的结果，对应的是add方法,add方法加不进去会抛异常，offer方法不会
+poll():从队列头部取并且移除一个元素
+peek(): 从队列头部取数据但是不移除数据
+```java
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
+
+public class T04_ConcurrentQueue {
+	public static void main(String[] args) {
+		Queue<String> strs = new ConcurrentLinkedQueue<>();
+		
+		for(int i=0; i<10; i++) {
+			strs.offer("a" + i);  //add
+		}
+		
+		System.out.println(strs);
+		
+		System.out.println(strs.size());
+		
+		System.out.println(strs.poll());
+		System.out.println(strs.size());
+		
+		System.out.println(strs.peek());
+		System.out.println(strs.size());
+		
+		//双端队列Deque
+	}
+}
+```
+#### 6.8 LinkedBlockingQueue
+
+LinkedBlockingQueue,体现Concurrent的这个点在哪里呢,我们来看这个LinkedBlockingQueue,用链表实现的BlockingQueue,
+是一个无界队列。就是它可以一直装到你内存满了为止，一直添加。
+
+BlockingQueue在Queue的基础上又添加了两个方法，一个叫put，一个叫take。这两个方法真正的实现了阻塞。
+put往里装如果满了我这个线程就会阻塞住,take往外取如果空了的话线程会阻塞住，所以这个BlockingQueue就实现了
+生产者消费者里面的那个容器。
+```java
+import java.util.Random;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
+
+public class T05_LinkedBlockingQueue {
+
+	static BlockingQueue<String> strs = new LinkedBlockingQueue<>();
+
+	static Random r = new Random();
+
+	public static void main(String[] args) {
+		new Thread(() -> {
+			for (int i = 0; i < 100; i++) {
+				try {
+					strs.put("a" + i); //如果满了，就会等待
+					TimeUnit.MILLISECONDS.sleep(r.nextInt(1000));
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+				}
+			}
+		}, "p1").start();
+
+		for (int i = 0; i < 5; i++) {
+			new Thread(() -> {
+				for (;;) {
+					try {
+						System.out.println(Thread.currentThread().getName() + " take -" + strs.take()); //如果空了，就会等待
+					} catch (InterruptedException e) {
+						e.printStackTrace();
+					}
+				}
+			}, "c" + i).start();
+
+		}
+	}
+}
+```
+#### 6.8 ArrayBlockingQueue
+
+ArrayBlockingQueue是有界的,你可以指定它一个固定的值10，它的容器就是10，
+当你往里面扔东西的时候，一旦满了这个put方法就会阻塞住。然后你可以看看用add方法
+满了之后他就会报异常。offer根据返回值来判断到底有没有加成功，offer还有另外一个写法
+你可以指定一个时间尝试着往里面加1秒钟，1秒钟之后如果加不进去它就返回了。
+
+回到那个面试经常被问到的问题，Queue和List的区别到底在哪里，主要就在这里，
+添加了offer、peek、poll、put、take这些个对线程友好的或者阻塞、或者等待的方法
+```java
+import java.util.Random;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.TimeUnit;
+
+public class T06_ArrayBlockingQueue {
+
+	static BlockingQueue<String> strs = new ArrayBlockingQueue<>(10);
+
+	static Random r = new Random();
+
+	public static void main(String[] args) throws InterruptedException {
+		for (int i = 0; i < 10; i++) {
+			strs.put("a" + i);
+		}
+		
+		//strs.put("aaa"); //满了就会等待，程序阻塞
+		//strs.add("aaa");
+		//strs.offer("aaa");
+		strs.offer("aaa", 1, TimeUnit.SECONDS);
+		
+		System.out.println(strs);
+	}
+}
+
+```
+接下来，我们来看几个比较特殊的Queue,这几个Queue是BlockingQueue,全是阻塞的，这几种Queue都有特殊的用途
+
+#### 6.9 DelayQueue
+
+DelayQueue可以实现在时间上的排序，这个DelayQueue能实现按照在里面等待的时间来进行排序。
+下面代码中,我们new了一个DelayQueue,他是BlockingQueue的一种，也是用于阻塞的队列，这个阻塞队列装任务的时候
+要求你必须实现Delay接口，Delayed往后拖延推迟，Delayed需要做一个compareTo，最后这个队列的实现，这个时间等待越短的就会
+有优先的得到运行，所以要重写好compareTo方法，getDelay去拿你delay多长时间了。往里头装任务的时候首先拿到当前时间，在
+当前时间的基础之上指定在多长时间之后这个任务要运行，当我们从队列取数据的时候，一般队列先添加的先往外拿，先进先出，这个队列是不一样的，按时间进行排序，
+DelayQueue就是按照时间进行任务调度。
+```java
+import java.util.Random;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.DelayQueue;
+import java.util.concurrent.Delayed;
+import java.util.concurrent.TimeUnit;
+
+public class T07_DelayQueue {
+
+	static BlockingQueue<MyTask> tasks = new DelayQueue<>();
+
+	static Random r = new Random();
+	
+	static class MyTask implements Delayed {
+		String name;
+		long runningTime;
+		
+		MyTask(String name, long rt) {
+			this.name = name;
+			this.runningTime = rt;
+		}
+
+		@Override
+		public int compareTo(Delayed o) {
+			if(this.getDelay(TimeUnit.MILLISECONDS) < o.getDelay(TimeUnit.MILLISECONDS))
+				return -1;
+			else if(this.getDelay(TimeUnit.MILLISECONDS) > o.getDelay(TimeUnit.MILLISECONDS)) 
+				return 1;
+			else 
+				return 0;
+		}
+
+		@Override
+		public long getDelay(TimeUnit unit) {
+			
+			return unit.convert(runningTime - System.currentTimeMillis(), TimeUnit.MILLISECONDS);
+		}
+		
+		
+		@Override
+		public String toString() {
+			return name + " " + runningTime;
+		}
+	}
+
+	public static void main(String[] args) throws InterruptedException {
+		long now = System.currentTimeMillis();
+		MyTask t1 = new MyTask("t1", now + 1000);
+		MyTask t2 = new MyTask("t2", now + 2000);
+		MyTask t3 = new MyTask("t3", now + 1500);
+		MyTask t4 = new MyTask("t4", now + 2500);
+		MyTask t5 = new MyTask("t5", now + 500);
+		
+		tasks.put(t1);
+		tasks.put(t2);
+		tasks.put(t3);
+		tasks.put(t4);
+		tasks.put(t5);
+		
+		System.out.println(tasks);
+		
+		for(int i=0; i<5; i++) {
+			System.out.println(tasks.take());
+		}
+	}
+}
+```
+DelayQueue本质上是一个PriorityQueue,PriorityQueue是从AbstractQueue继承的。
+PriorityQueue特点是它内部你往里装的时候并不是按顺序往里装的，而是内部进行了一个排序。按照
+优先级，最小的优先。它内部实现的结构是一个二叉树、这个二叉树可以认为是堆排序里面的那个最小堆值排在最上面
+```java
+import java.util.PriorityQueue;
+
+public class T07_01_PriorityQueque {
+    public static void main(String[] args) {
+        PriorityQueue<String> q = new PriorityQueue<>();
+
+        q.add("c");
+        q.add("e");
+        q.add("a");
+        q.add("d");
+        q.add("z");
+
+        for (int i = 0; i < 5; i++) {
+            System.out.println(q.poll());
+        }
+
+    }
+}
+```
+
+#### 6.10 SynchronousQueue
+
+SynchronousQueue容量为0，就是这个东西它不是用来装内容的，是专门用来两个线程之间传内容的，给线程下达任务的,
+和之前讲的exchanger是一个意思，可以翻翻前面的章节。看下面代码,有一个线程起来等着take，里面没值的时候肯定是take不到的，
+然后就等着。当主线程put以后，就能take到并且打印出来最后打印容器的size一定是0，打印出aaa来这个没问题，把strs.put("aaa");注释掉程序
+会在这里阻塞，永远等着。如果add方法直接就报错，原因是满了，这个容器为0，你不可以往里面扔东西。这个Queue和其他的队列很重要的区别就是
+你不能往里面装东西，只能用来阻塞式的put调用，要求是前面的有人等着拿这个东西的时候你才可以往里面装,但容量为0，其实说白了就是我要传递到另外一个的
+手里才可以。这个SynchronousQueue看似没有用，其实不然，SynchronousQueue在线程池里用处特别大，很多的线程取任务，互相之间进行任务调用的时候用的都是它。
+```java
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.SynchronousQueue;
+
+public class T08_SynchronusQueue { //容量为0
+	public static void main(String[] args) throws InterruptedException {
+		BlockingQueue<String> strs = new SynchronousQueue<>();
+		
+		new Thread(()->{
+			try {
+				System.out.println(strs.take());
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+		}).start();
+
+		strs.put("aaa"); //阻塞等待消费者消费
+		//strs.put("bbb");
+		//strs.add("aaa");	// add方法会直接报错，原因是满了，这个容器为0，不能往里扔东西
+		System.out.println(strs.size());
+	}
+}
+
+```
