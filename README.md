@@ -1716,7 +1716,7 @@ ConcurrentHashMap和ConcurrentSkipListMap相同点和区别
 
 看下面程序，用了容器，100个线程，每个线程往里面放1000条数据，可以用ArrayList、Vector、但是ArrayList会有并发问题，
 因为多线程访问没有加锁,可以用CopyOnWriteArrayList。CopyOnWrite名为写时复制，原理很简单，当我们需要往里面加元素的时候你把里面的
-元素复制出来。很多时候，读多写少，可以考虑CopyOWrite这种方式来提高效率，CopyOnWrite为什么会提高效率呢？因为写的时候不加锁，大家都知道
+元素复制出来。很多时候，读多写少，可以考虑CopyOWrite这种方式来提高效率，CopyOnWrite为什么会提高效率呢？因为读的时候不加锁，大家都知道
 我Vector读写的时候都加锁。用CopyOnWrite我读的时候不加锁，写的时候会在原来的基础上拷贝一个，拷贝的时候扩展出一个新元素来，
 然后把你新添加的这个扔到这个元素中，再把容器的一个引用指向新的，这就是写时复制
 
