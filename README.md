@@ -68,6 +68,8 @@
       * [6.8 ArrayBlockingQueue](#68-arrayblockingqueue)
       * [6.9 DelayQueue](#69-delayqueue)
       * [6.10 SynchronousQueue](#610-synchronousqueue)
+    * [7 线程池](#7-线程池)
+      * [7.1 华为面试题](#71-华为面试题)
 
 
 # architect
@@ -2024,3 +2026,9 @@ public class T08_SynchronusQueue { //容量为0
 }
 
 ```
+### 7 线程池
+
+#### 7.1 华为面试题
+
+来看一道之前华为的面试题，其实它是一道填空题，后来就很多人开始考这道题，这个面试题是两个线程，第一个线程是从1到26，第二个线程
+是从A到Z，让两个线程做到同时运行，交替输出，顺序打印。这道题的解法有很多,本項目chap7包下提供了10种解法，僅供參考
