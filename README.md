@@ -71,6 +71,7 @@
       * [6.11 TransferQueue](#611-transferqueue)
     * [7 线程池](#7-线程池)
       * [7.1 华为面试题](#71-华为面试题)
+      * [7.2 线程池理论知识](#72-线程池理论知识)
 
 
 # architect
@@ -2076,3 +2077,261 @@ public class T09_TransferQueue {
 
 来看一道之前华为的面试题，其实它是一道填空题，后来就很多人开始考这道题，这个面试题是两个线程，第一个线程是从1到26，第二个线程
 是从A到Z，让两个线程做到同时运行，交替输出，顺序打印。这道题的解法有很多,本項目chap7包下提供了10种解法，僅供參考
+
+#### 7.2 线程池理论知识
+
+线程池首先有几个接口先了解下第一个是Executor，第二个是ExecutorService,在后面才是线程池的一个使用ThreadPoolExecutor,
+![线程池接口继承关系](readme.assets/线程池接口继承关系.png)
+Executor看它的名字也能理解,执行者，所以他有一个方法叫执行，执行的东西是Runnable，有了Executor之后我们就可以把任务的定义和执行拆分开
+，不需要关系在哪里定义线程了。不像之前需要new 一个Thread然后去重写它的Run方法.start才可以运行。
+```java
+public interface Executor {
+    void execute(Runnable command);
+}
+```
+ExecutorService又是什么呢?他是从Executor继承，另外他除了去实现Executor可以去执行一个任务以外，
+他还完善了整个任务执行器的一个生命周期,就拿线程池来举例子，一个线程池里面一堆的线程就是一堆工人，执行完一个任务之后
+我这个线程怎么结束啊，线程池定义了这样一些个方法:
+
+void shutdown(); 结束
+
+List<Runnable> shutdownNow();马上结束
+
+boolean isShundown(); 是否结束了
+
+boolean isTerminated(); 是不是整体都执行完了
+
+boolean awaitTermination(long timeout, TimeUnit unit) throws InterruptedException 等着结束，等多长时间，时间到了还不结束的话他就返回false
+
+等等，所以这里面是实现了一些线程的线程池的生命周期的东西，扩展了Executor的接口，真正的线程池的其实是在ExecutorService的这个基础上来实现的。
+当我们看到这个ExecutorService的时候你会发现他除了Executor执行任务外还有submit提交任务，执行任务是直接拿过来马上运行，
+而submit是扔给线程池，什么时候运行由这个线程池来决定，相当于是异步的，我往里面一扔就不管了。那好，如果不管的话的话他什么时候有结果呢，这就涉及到了
+比较新的类,比如Future,RunnableFuture、FutureTask、以及callable
+
+Callable这个接口和runnable类似，都可以由线程去执行,不同的是Callable中的call方法有返回值
+```java
+@FunctionalInterface
+public interface Callable<V> {
+    /**
+     * Computes a result, or throws an exception if unable to do so.
+     *
+     * @return computed result
+     * @throws Exception if unable to compute a result
+     */
+    V call() throws Exception;
+}
+```
+有了这个callable之后，我们再来看一个接口Future,这个future代表的是什么呢，这个future代表的是那个Callable被执行完之后
+我该怎么才能拿到那个结果啊,它会封装到一个Future里面,未来你执行完之后可以把这个结果放到这个未来有可能执行完的结果里头,
+所以Future代表的是未来执行完的一个结果。
+
+由于Callable基本上就是为了线程池而设计的，所以你要是不用线程池的接口想去写Callable的话还是比较麻烦的，所以这里面会用到一些线程池的
+直接用法。我们来看Future是怎么用的,在我们读这个ExecutorService的时候你会发现他里面有submit方法，这个submit方法是异步的提交任务，
+提交完了任务之后原线程该怎么运行怎么运行，运行完了之后会出一个结果,这个结果出在哪，他的返回值是一个Future，所以，你只能去提交一个Callable，必须
+有返回值，线程池执行完了，异步的就是把任务交给线程池之后我主线程该干嘛干嘛，调用get方法直到有结果之后返回，Callable一般配合线程池和Future使用。
+
+更灵活的一个用法是FutureTask，即是一个Future同时又是一个Task，原来这个Callable只能是一个Task不能作为Future来使用。这个FutureTask
+不但能作为任务来使用，还可以存放任务的结果。为什么他能做到这一点呢，因为FutureTask实现了RunnableFuture，RunnableFuture
+即实现了Runnable又实现了Future，所以他即是一个任务又是一个Future。所以这个FutureTask是更好用的一个类。后面的
+WorkStealingPool、ForkJoinPool这些基本上是会用到这个类的
+
+![FutureTask](readme.assets/FutureTask.png)
+
+```java
+import java.util.concurrent.*;
+
+public class T06_00_Future {
+	public static void main(String[] args) throws InterruptedException, ExecutionException {
+		
+		FutureTask<Integer> task = new FutureTask<>(()->{
+			TimeUnit.MILLISECONDS.sleep(500);
+			return 1000;
+		}); //new Callable () { Integer call();}
+		
+		new Thread(task).start();
+		
+		System.out.println(task.get()); //阻塞
+
+
+	}
+}
+```
+总结一下上面的几个类
+
+Callable类似与Runnable，但是有返回值
+
+Future，是用来存储执行的将来才会产生的结果
+
+FutureTask 他是Future加上Runnable，既可以执行又可以存结果
+
+CompletableFuture，管理多个Future的结果
+
+CompletableFuture底层非常复杂，但是用法特别灵活，底层用的是ForkJoinPool。
+先来看看他的用法
+```java
+import java.io.IOException;
+import java.util.Random;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+
+public class T06_01_CompletableFuture {
+    public static void main(String[] args) throws ExecutionException, InterruptedException {
+        long start, end;
+
+        /*start = System.currentTimeMillis();
+
+        priceOfTM();
+        priceOfTB();
+        priceOfJD();
+
+        end = System.currentTimeMillis();
+        System.out.println("use serial method call! " + (end - start));*/
+
+        start = System.currentTimeMillis();
+
+        CompletableFuture<Double> futureTM = CompletableFuture.supplyAsync(()->priceOfTM());
+        CompletableFuture<Double> futureTB = CompletableFuture.supplyAsync(()->priceOfTB());
+        CompletableFuture<Double> futureJD = CompletableFuture.supplyAsync(()->priceOfJD());
+        
+        // 等待所有异步线程执行结束
+        CompletableFuture.allOf(futureTM, futureTB, futureJD).join();
+        
+        //  supplyAsync产生一个异步任务
+        CompletableFuture.supplyAsync(()->priceOfTM())
+                // 上一个阶段的输出作为该方法的输入
+                .thenApply(String::valueOf)
+                .thenApply(str-> "price " + str)
+                // 接收上一阶段的输出作为本阶段的输入
+                .thenAccept(System.out::println);
+
+
+        end = System.currentTimeMillis();
+        System.out.println("use completable future! " + (end - start));
+
+        try {
+            System.in.read();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private static double priceOfTM() {
+        delay();
+        return 1.00;
+    }
+
+    private static double priceOfTB() {
+        delay();
+        return 2.00;
+    }
+
+    private static double priceOfJD() {
+        delay();
+        return 3.00;
+    }
+
+    /*private static double priceOfAmazon() {
+        delay();
+        throw new RuntimeException("product not exist!");
+    }*/
+
+    private static void delay() {
+        int time = new Random().nextInt(500);
+        try {
+            TimeUnit.MILLISECONDS.sleep(time);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        System.out.printf("After %s sleep!\n", time);
+    }
+}
+
+```
+CompletableFuture是什么东西呢?他是各种任务的一种管理类,总而言之呢Completable是一个更高级的类,它能够
+在很高的一个层面上来帮助你管理一些个你想要的的各种各样的任务，比如说你可以对任务进行各种各样的组合，所有任务
+完成之后你要执行一个什么样的结果，以及任何一个任务完成之后你要执行一个什么样的结果，还有他可以提供一个链式的
+处理方式Lamda的一些写法。
+
+我们来了解一下线程池，线程池从目前JDK提供的有两种类型，第一种就是普通的线程池ThreadPoolExecutor，
+第二种是ForkJoinPool，这两种是不同类型的线程池，能干的事不太一样，Fork是分叉、分叉完再分叉、最后汇总的结果叫join。
+这就是ForkJoinPool的概念。这是两种不同类型的线程池，我们平时说的一般是第一种线程池。
+
+ThreadPoolExecutor他的父类是从AbstractExecutorService，而AbstractExecutorService的父类是ExecutorService，
+ExecutorService的父类是Executor，所以ThreadPoolExecutor相当于线程池的执行器，就是大家都可以往里面扔任务。
+一般线程池都需要自己定义。
+
+来看一下怎么手动定义一个线程池，看下面这段代码
+```java
+import java.io.IOException;
+import java.util.concurrent.*;
+
+public class T05_00_HelloThreadPool {
+
+    static class Task implements Runnable {
+        private int i;
+
+        public Task(int i) {
+            this.i = i;
+        }
+
+        @Override
+        public void run() {
+            System.out.println(Thread.currentThread().getName() + " Task " + i);
+            try {
+                System.in.read();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+
+        @Override
+        public String toString() {
+            return "Task{" +
+                    "i=" + i +
+                    '}';
+        }
+    }
+
+    public static void main(String[] args) {
+        // 线程池里面的7个参数, 
+        // 第1个参数corePoolSize核心线程数，最开始的时候这个线程池里面是有一定的核心线程数的
+        // 第2个叫maximumPoolSize最大线程数，线程数不够了，能扩展到最大线程是多少
+        // 第3个keepAliveTime生存时间，意思是这个线程有很长时间没干活了请你把它归还给操作系统
+        // 第4个TimeUnit.SECONDS生存时间的单位到底是毫秒纳秒还是秒自己去定义
+        // 第5个是任务队列,就是我们上节课讲的BlockingQueue，各种各样的BlockingQueue你都可以往里面扔,
+        // 我们这用的是ArrayBlockingQueue，参数最多可以装4个任务；
+        // 第6个是线程工厂 defaultThreadFactory,他返回的是一个new DefaultThreadFactory，它要去你去实现ThreadFactory
+        // 的接口,这个接口只有一个方法叫new Thread,所以就是产生线程的，可以通过这种方式产生自定义的线程，默认
+        // 产生的是defaultFactory，而defaultFactory产生的线程有几个特点:new 出来的时候指定了group制定了线程名字,
+        // 然后指定的这个线程绝对不是守护线程，设定好你线程的优先级，自己可以定义产生的到底是什么样的线程，指定
+        // 线程名叫什么
+        // 第7个叫拒绝策略，指的是线程池忙，而且人物队列满的这种情况下我们就要执行各种各样的拒绝策略，jdk默认
+        //提供了4种拒绝策略，也是可以自定义的。
+        // 1.Abort: 抛异常
+        // 2.Discard: 扔掉,不抛异常
+        // 3.DiscardOldest: 扔掉排队时间最久的
+        // 4. CallerRuns: 调用者处理服务
+        // 一般情况这4种我们会自定义策略，去实现这个拒绝策略的接口，处理的方式是一般我们的消息需要保存下来，要是订单的话那就
+        // 更需要保存了，保存到kafka,保存到redis或者是存到数据库随便你，然后做好日志。
+        ThreadPoolExecutor tpe = new ThreadPoolExecutor(2, 4,
+                60, TimeUnit.SECONDS,
+                new ArrayBlockingQueue<Runnable>(4),
+                Executors.defaultThreadFactory(),
+                new ThreadPoolExecutor.CallerRunsPolicy());
+
+        for (int i = 0; i < 8; i++) {
+            tpe.execute(new Task(i));
+        }
+
+        System.out.println(tpe.getQueue());
+
+        tpe.execute(new Task(100));
+
+        System.out.println(tpe.getQueue());
+
+        tpe.shutdown();
+    }
+}
+
+```
