@@ -68,6 +68,7 @@
       * [6.8 ArrayBlockingQueue](#68-arrayblockingqueue)
       * [6.9 DelayQueue](#69-delayqueue)
       * [6.10 SynchronousQueue](#610-synchronousqueue)
+      * [6.11 TransferQueue](#611-transferqueue)
     * [7 线程池](#7-线程池)
       * [7.1 华为面试题](#71-华为面试题)
 
@@ -2025,6 +2026,49 @@ public class T08_SynchronusQueue { //容量为0
 	}
 }
 
+```
+#### 6.11 TransferQueue
+
+TransferQueue传递，实际上是前面各种各样Queue的一个组合，它可以给线程来传递任务，它不像SynchronusQueue
+只能传递一个，TransferQueue做成列表可以传很多个.比较牛X的就是它添加了一个方法叫transfer，如果我们用put就
+相当于一个线程来了往里一装它就走了。transfer就是装完在这等着，阻塞等有人把它取走我这个线程才回去干我自己的事情。
+一般使用场景：我做了一件事，我这个事要求有一个结果，有了这个结果之后我可以继续进行我下面的这个事情的时候，比方说我付了钱，
+这个订单我付钱完成了，但是我要一直等这个付账的结果完成才可以给客户反馈。
+
+```java
+import java.util.concurrent.LinkedTransferQueue;
+import java.util.concurrent.TimeUnit;
+
+public class T09_TransferQueue {
+	public static void main(String[] args) throws InterruptedException {
+		LinkedTransferQueue<String> strs = new LinkedTransferQueue<>();
+
+		new Thread(() -> {
+			try {
+				TimeUnit.SECONDS.sleep(2);
+				System.out.println(strs.take());
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+		}).start();
+        // 将元素转移给消费者，如果需要的话等待。 
+        // 更准确地说，如果存在一个消费者已经等待接收它（在 take 或timed poll（long，TimeUnit）poll）中，则立即传送指定的元素，否则等待直到元素由消费者接收。
+		strs.transfer("aaa");
+
+//		strs.put("aaa");
+//
+//
+//		new Thread(() -> {
+//			try {
+//				System.out.println(strs.take());
+//			} catch (InterruptedException e) {
+//				e.printStackTrace();
+//			}
+//		}).start();
+
+
+	}
+}
 ```
 ### 7 线程池
 
