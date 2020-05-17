@@ -72,6 +72,27 @@
     * [7 线程池](#7-线程池)
       * [7.1 华为面试题](#71-华为面试题)
       * [7.2 线程池理论知识](#72-线程池理论知识)
+    * [8 线程池与源码阅读](#8-线程池与源码阅读)
+      * [8.1 常用线程池介绍](#81-常用线程池介绍)
+    * [9. JMH与Disruptor](#9-jmh与disruptor)
+      * [JMH Java准测试工具套件](#jmh-java准测试工具套件)
+        * [什么是JMH](#什么是jmh)
+        * [官网](#官网)
+        * [创建JMH测试](#创建jmh测试)
+        * [JMH中的基本概念](#jmh中的基本概念)
+        * [Next](#next)
+      * [Disruptor](#disruptor)
+        * [介绍](#介绍)
+        * [Disruptor的特点](#disruptor的特点)
+        * [RingBuffer](#ringbuffer)
+        * [Disruptor开发步骤](#disruptor开发步骤)
+        * [事件发布模板](#事件发布模板)
+        * [使用EventTranslator发布事件](#使用eventtranslator发布事件)
+        * [使用Lamda表达式](#使用lamda表达式)
+        * [ProducerType生产者线程模式](#producertype生产者线程模式)
+        * [等待策略](#等待策略)
+        * [消费者异常处理](#消费者异常处理)
+        * [依赖处理](#依赖处理)
 
 
 # architect
@@ -2580,16 +2601,19 @@ public class T14_MyRejectedHandler {
     }
 }
 ```
-
-
+**线程池源码分析**
+```java
+// todo
+```
 ### 9. JMH与Disruptor
+
 #### JMH Java准测试工具套件
 
 ##### 什么是JMH
 
-#####官网
-
- http://openjdk.java.net/projects/code-tools/jmh/ 
+##### 官网 
+http://openjdk.java.net/projects/code-tools/jmh/
+  
 
 ##### 创建JMH测试
 
@@ -2609,12 +2633,9 @@ public class T14_MyRejectedHandler {
            <maven.compiler.source>1.8</maven.compiler.source>
            <maven.compiler.target>1.8</maven.compiler.target>
        </properties>
-   
        <groupId>mashibing.com</groupId>
        <artifactId>HelloJMH2</artifactId>
        <version>1.0-SNAPSHOT</version>
-   
-   
        <dependencies>
            <!-- https://mvnrepository.com/artifact/org.openjdk.jmh/jmh-core -->
            <dependency>
@@ -2631,8 +2652,6 @@ public class T14_MyRejectedHandler {
                <scope>test</scope>
            </dependency>
        </dependencies>
-   
-   
    </project>
    ```
 
@@ -2782,7 +2801,7 @@ RingBuffer的序号，指向下一个可用的元素
 
 3. 定义EventHandler（消费者），处理容器中的元素
 
-#####事件发布模板
+##### 事件发布模板
 
 ```java
 long sequence = ringBuffer.next();  // Grab the next sequence
@@ -2795,7 +2814,7 @@ try {
 }
 ```
 
-#####使用EventTranslator发布事件
+##### 使用EventTranslator发布事件
 
 ```java
 //===============================================================
@@ -2901,7 +2920,7 @@ public class Main03
 >
 > 如果是多个生产者（多线程），但模式指定为SINGLE，会出什么问题呢？
 
-## 等待策略
+##### 等待策略
 
 1，(常用）BlockingWaitStrategy：通过线程阻塞的方式，等待生产者唤醒，被唤醒后，再循环检查依赖的sequence是否已经消费。
 
@@ -2925,7 +2944,7 @@ public class Main03
 
 覆盖：disruptor.handleExceptionFor().with()
 
-## 依赖处理
+##### 依赖处理
 
 
 
